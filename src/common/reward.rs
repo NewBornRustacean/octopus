@@ -39,9 +39,7 @@ impl<T: Float + Send + Sync> Reward for NumericReward<T> {
     }
 
     fn get_value(&self) -> Result<f64, RewardError> {
-        Ok(self.value.to_f64().ok_or_else(|| {
-            RewardError::InvalidRewardValue
-        })?)
+        Ok(self.value.to_f64().ok_or_else(|| RewardError::InvalidRewardValue)?)
     }
 }
 
@@ -55,7 +53,7 @@ impl<T: Float + Send + Sync> NumericReward<T> {
 }
 
 /// A binary reward implementation.
-/// 
+///
 /// This is used for binary outcomes (success/failure, 0/1) in bandit problems.
 #[derive(Debug, Clone)]
 pub struct BinaryReward {
