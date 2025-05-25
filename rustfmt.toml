@@ -1,0 +1,4 @@
+edition = "2024"
+max_width = 100
+array_width = 60
+chain_width = 80

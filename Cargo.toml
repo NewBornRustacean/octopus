@@ -1,0 +1,9 @@
+[package]
+name = "octopus"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+num-traits = "0.2.19"
+rayon = "1.10.0"
+thiserror = "2.0.12"
