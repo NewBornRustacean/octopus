@@ -1,8 +1,8 @@
-use std::sync::{Arc, RwLock};
-use std::collections::HashMap;
-use rayon::prelude::*;
-use std::fmt::Debug;
 use crate::common::{Arm, Reward, error::StateError};
+use rayon::prelude::*;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::{Arc, RwLock};
 
 /// Thread-safe state management for bandit algorithms
 pub struct BanditState<A: Arm, R: Reward> {
@@ -23,47 +23,46 @@ impl<A: Arm + Debug, R: Reward> BanditState<A, R> {
 
     /// Gets the number of times an arm has been pulled
     pub fn get_count(&self, arm: &A) -> Result<usize, StateError> {
-        self.counts.read()
-            .map_err(|e| StateError::ConcurrentStateAccessError(
-                format!("Failed to read counts: {}", e)
-            ))?
+        self.counts
+            .read()
+            .map_err(|e| {
+                StateError::ConcurrentStateAccessError(format!("Failed to read counts: {}", e))
+            })?
             .get(arm)
             .copied()
-            .ok_or_else(|| StateError::ArmNotFoundInState(
-                format!("Arm {:?} not found in state", arm)
-            ))
+            .ok_or_else(|| {
+                StateError::ArmNotFoundInState(format!("Arm {:?} not found in state", arm))
+            })
     }
 
     /// Increments the count for an arm
     pub fn increment_count(&self, arm: &A) -> Result<(), StateError> {
-        let mut counts = self.counts.write()
-            .map_err(|e| StateError::ConcurrentStateAccessError(
-                format!("Failed to write counts: {}", e)
-            ))?;
-        *counts.entry(arm.clone())
-            .or_insert(0) += 1;
+        let mut counts = self.counts.write().map_err(|e| {
+            StateError::ConcurrentStateAccessError(format!("Failed to write counts: {}", e))
+        })?;
+        *counts.entry(arm.clone()).or_insert(0) += 1;
         Ok(())
     }
 
     /// Gets the total reward for an arm
     pub fn get_reward(&self, arm: &A) -> Result<R, StateError> {
-        self.rewards.read()
-            .map_err(|e| StateError::ConcurrentStateAccessError(
-                format!("Failed to read rewards: {}", e)
-            ))?
+        self.rewards
+            .read()
+            .map_err(|e| {
+                StateError::ConcurrentStateAccessError(format!("Failed to read rewards: {}", e))
+            })?
             .get(arm)
             .cloned()
-            .ok_or_else(|| StateError::ArmNotFoundInState(
-                format!("Arm {:?} not found in state", arm)
-            ))
+            .ok_or_else(|| {
+                StateError::ArmNotFoundInState(format!("Arm {:?} not found in state", arm))
+            })
     }
 
     /// Updates the reward for an arm
     pub fn update_reward(&self, arm: &A, reward: R) -> Result<(), StateError> {
-        let mut rewards = self.rewards.write()
-            .map_err(|e| StateError::ConcurrentStateAccessError(
-                format!("Failed to write rewards: {}", e)
-            ))?;
+        let mut rewards = self.rewards.write().map_err(|e| {
+            StateError::ConcurrentStateAccessError(format!("Failed to write rewards: {}", e))
+        })?;
         rewards.insert(arm.clone(), reward);
         Ok(())
     }
@@ -76,28 +75,25 @@ impl<A: Arm + Debug, R: Reward> BanditState<A, R> {
         }
 
         let reward = self.get_reward(arm)?;
-        let value = reward.get_value()
-            .map_err(|e| StateError::InvalidRewardUpdate(
-                format!("Failed to get reward value: {}", e)
-            ))?;
+        let value = reward.get_value().map_err(|e| {
+            StateError::InvalidRewardUpdate(format!("Failed to get reward value: {}", e))
+        })?;
 
         Ok(value / count as f64)
     }
 
     /// Resets the state for all arms
     pub fn reset(&self) -> Result<(), StateError> {
-        let mut counts = self.counts.write()
-            .map_err(|e| StateError::ConcurrentStateAccessError(
-                format!("Failed to write counts: {}", e)
-            ))?;
-        let mut rewards = self.rewards.write()
-            .map_err(|e| StateError::ConcurrentStateAccessError(
-                format!("Failed to write rewards: {}", e)
-            ))?;
-        
+        let mut counts = self.counts.write().map_err(|e| {
+            StateError::ConcurrentStateAccessError(format!("Failed to write counts: {}", e))
+        })?;
+        let mut rewards = self.rewards.write().map_err(|e| {
+            StateError::ConcurrentStateAccessError(format!("Failed to write rewards: {}", e))
+        })?;
+
         counts.clear();
         rewards.clear();
-        
+
         Ok(())
     }
 }
