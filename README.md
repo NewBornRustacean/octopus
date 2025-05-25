@@ -42,8 +42,9 @@ pub trait ContextualBandit<Arm, Context, Reward> {
 }
 ```
 
-* `Arm` and `Context` will be generic (user-defined or enums/indexes).
-* `Reward` supports custom types via trait bounds like `Clone + Copy + Send`.
+* `Arm`: generic, must be `Clone + Eq + Hash + Send + Sync`
+* `Reward`: customizable (e.g. struct with `ctr`, `revenue`, etc.), must be `Clone + Send + Sync`
+* `Context`: flexible type, must be `Clone + Send + Sync`
 
 ## 🧪 **Initial Algorithms**
 
@@ -59,9 +60,11 @@ pub trait ContextualBandit<Arm, Context, Reward> {
 
 ## 🔁 **Concurrency Design**
 
+* Parallelism across arms(not across rounds)
 * Internals will use multi-threaded computation with `rayon` or scoped threads.
 * Safe internal mutability using `RwLock`/`Mutex`/`Atomic` depending on performance testing.
 * Designed so user **does not need to manage concurrency** explicitly.
+  
 
 Example:
 
