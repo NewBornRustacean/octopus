@@ -1,176 +1,260 @@
-use crate::common::{Arm, Reward, error::StateError};
+use crate::common::{arm::Arm, error::StateError, reward::Reward, reward::RewardAggregator};
+use dashmap::DashMap;
 use rayon::prelude::*;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
 
-/// Thread-safe state management for bandit algorithms
-pub struct BanditState<A: Arm, R: Reward> {
-    // Count of times each arm has been pulled
-    counts: Arc<RwLock<HashMap<A, usize>>>,
-    // Total reward for each arm
-    rewards: Arc<RwLock<HashMap<A, R>>>,
+#[derive(Debug)]
+pub struct ArmState<A: Arm, RA: RewardAggregator>
+where
+    A: Send + Sync,
+    RA: Send + Sync,
+{
+    pub arm: A,
+    pub reward_aggregator: RA,
+    pub n_pulls: usize,
 }
 
-impl<A: Arm + Debug, R: Reward> BanditState<A, R> {
-    /// Creates a new empty bandit state
+impl<A: Arm, RA: RewardAggregator> ArmState<A, RA>
+where
+    A: Send + Sync,
+    RA: Send + Sync,
+{
+    pub fn new(arm: A, reward_aggregator: RA) -> Self {
+        Self {
+            arm,
+            reward_aggregator,
+            n_pulls: 0,
+        }
+    }
+
+    pub fn update<R: Reward>(&mut self, reward: R) -> Result<(), StateError> {
+        let value = reward.get_value()?;
+        self.reward_aggregator.update(value)?;
+        self.n_pulls += 1;
+        Ok(())
+    }
+
+    pub fn estimate(&self) -> Result<f64, StateError> {
+        self.reward_aggregator.mean().map_err(|e| StateError::RewardError(e))
+    }
+
+    pub fn pulls(&self) -> usize {
+        self.n_pulls
+    }
+}
+
+#[derive(Debug)]
+pub struct StateStore<A: Arm, RA: RewardAggregator>
+where
+    A: Send + Sync,
+    RA: Send + Sync,
+{
+    pub states: DashMap<A, ArmState<A, RA>>,
+}
+
+impl<A: Arm + std::fmt::Debug, RA: RewardAggregator> StateStore<A, RA>
+where
+    A: Send + Sync,
+    RA: Send + Sync,
+{
     pub fn new() -> Self {
         Self {
-            counts: Arc::new(RwLock::new(HashMap::new())),
-            rewards: Arc::new(RwLock::new(HashMap::new())),
+            states: DashMap::new(),
         }
     }
 
-    /// Gets the number of times an arm has been pulled
-    pub fn get_count(&self, arm: &A) -> Result<usize, StateError> {
-        self.counts
-            .read()
-            .map_err(|e| {
-                StateError::ConcurrentStateAccessError(format!("Failed to read counts: {}", e))
-            })?
-            .get(arm)
-            .copied()
-            .ok_or_else(|| {
-                StateError::ArmNotFoundInState(format!("Arm {:?} not found in state", arm))
-            })
-    }
-
-    /// Increments the count for an arm
-    pub fn increment_count(&self, arm: &A) -> Result<(), StateError> {
-        let mut counts = self.counts.write().map_err(|e| {
-            StateError::ConcurrentStateAccessError(format!("Failed to write counts: {}", e))
-        })?;
-        *counts.entry(arm.clone()).or_insert(0) += 1;
+    pub fn add_arm(&self, arm: A, reward_aggregator: RA) -> Result<(), StateError> {
+        if self.states.contains_key(&arm) {
+            return Err(StateError::ArmAlreadyExists);
+        }
+        self.states.insert(arm.clone(), ArmState::new(arm, reward_aggregator));
         Ok(())
     }
 
-    /// Gets the total reward for an arm
-    pub fn get_reward(&self, arm: &A) -> Result<R, StateError> {
-        self.rewards
-            .read()
-            .map_err(|e| {
-                StateError::ConcurrentStateAccessError(format!("Failed to read rewards: {}", e))
-            })?
-            .get(arm)
-            .cloned()
-            .ok_or_else(|| {
-                StateError::ArmNotFoundInState(format!("Arm {:?} not found in state", arm))
-            })
+    pub fn update<R: Reward>(&self, arm: A, reward: R) -> Result<(), StateError> {
+        let mut state = self.states.get_mut(&arm).ok_or(StateError::ArmNotFound)?;
+        state.update(reward)
     }
 
-    /// Updates the reward for an arm
-    pub fn update_reward(&self, arm: &A, reward: R) -> Result<(), StateError> {
-        let mut rewards = self.rewards.write().map_err(|e| {
-            StateError::ConcurrentStateAccessError(format!("Failed to write rewards: {}", e))
-        })?;
-        rewards.insert(arm.clone(), reward);
-        Ok(())
+    pub fn estimate(&self, arm: A) -> Result<f64, StateError> {
+        let state = self.states.get(&arm).ok_or(StateError::ArmNotFound)?;
+        state.estimate()
     }
 
-    /// Gets the average reward for an arm
-    pub fn get_average_reward(&self, arm: &A) -> Result<f64, StateError> {
-        let count = self.get_count(arm)?;
-        if count == 0 {
-            return Ok(0.0);
+    pub fn pulls(&self, arm: A) -> Result<usize, StateError> {
+        let state = self.states.get(&arm).ok_or(StateError::ArmNotFound)?;
+        Ok(state.pulls())
+    }
+
+    pub fn total_pulls(&self) -> usize {
+        self.states.iter().map(|entry| entry.pulls()).sum()
+    }
+
+    pub fn best_arm(&self) -> Result<A, StateError> {
+        if self.states.len() == 0 {
+            return Err(StateError::NoArmsAvailable);
         }
 
-        let reward = self.get_reward(arm)?;
-        let value = reward.get_value().map_err(|e| {
-            StateError::InvalidRewardUpdate(format!("Failed to get reward value: {}", e))
-        })?;
+        // If we have arms, we'll always return one, even if all estimates are the same
+        let mut best_arm = None;
+        let mut best_estimate = f64::NEG_INFINITY;
 
-        Ok(value / count as f64)
+        for entry in self.states.iter() {
+            // If estimate fails, we treat it as the worst possible estimate
+            let estimate = entry.estimate().unwrap_or(f64::NEG_INFINITY);
+            if estimate >= best_estimate {
+                best_estimate = estimate;
+                best_arm = Some(entry.key().clone());
+            }
+        }
+
+        // We know this is Some because we checked !is_empty() above
+        Ok(best_arm.unwrap())
     }
 
-    /// Resets the state for all arms
-    pub fn reset(&self) -> Result<(), StateError> {
-        let mut counts = self.counts.write().map_err(|e| {
-            StateError::ConcurrentStateAccessError(format!("Failed to write counts: {}", e))
-        })?;
-        let mut rewards = self.rewards.write().map_err(|e| {
-            StateError::ConcurrentStateAccessError(format!("Failed to write rewards: {}", e))
-        })?;
-
-        counts.clear();
-        rewards.clear();
-
-        Ok(())
+    pub fn print_state(&self) {
+        self.states.iter().for_each(|entry| {
+            println!(
+                "Arm: {:?}, Estimate: {:?}, Pulls: {:?}",
+                entry.key(),
+                entry.estimate(),
+                entry.pulls()
+            );
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{NumericArm, NumericReward};
+    use crate::common::arm::{NumericArm, StringArm};
+    use crate::common::reward::{BinaryReward, MeanAggregator, NumericReward};
 
     #[test]
-    fn test_state_creation() {
-        let state = BanditState::<NumericArm, NumericReward<f64>>::new();
-        assert!(state.counts.read().unwrap().is_empty());
-        assert!(state.rewards.read().unwrap().is_empty());
+    fn test_add_arm() {
+        let store: StateStore<NumericArm, MeanAggregator> = StateStore::new();
+
+        // Add first arm
+        let arm1 = NumericArm::new("test1".to_string());
+        assert!(store.add_arm(arm1.clone(), MeanAggregator::new()).is_ok());
+
+        // Add second arm
+        let arm2 = NumericArm::new("test2".to_string());
+        assert!(store.add_arm(arm2.clone(), MeanAggregator::new()).is_ok());
+
+        // Try to add duplicate arm
+        assert!(matches!(
+            store.add_arm(arm1, MeanAggregator::new()),
+            Err(StateError::ArmAlreadyExists)
+        ));
     }
 
     #[test]
-    fn test_arm_count() {
-        let state = BanditState::<NumericArm, NumericReward<f64>>::new();
-        let arm = NumericArm::new(1);
+    fn test_update_and_estimate() {
+        let store: StateStore<NumericArm, MeanAggregator> = StateStore::new();
+        let arm = NumericArm::new("test".to_string());
 
-        // Test initial count
-        assert!(state.get_count(&arm).is_err());
+        // Add arm
+        store.add_arm(arm.clone(), MeanAggregator::new()).unwrap();
 
-        // Test increment
-        state.increment_count(&arm).unwrap();
-        assert_eq!(state.get_count(&arm).unwrap(), 1);
+        // Update with numeric rewards
+        store.update(arm.clone(), NumericReward::new(10.0).unwrap()).unwrap();
+        store.update(arm.clone(), NumericReward::new(20.0).unwrap()).unwrap();
 
-        // Test multiple increments
-        state.increment_count(&arm).unwrap();
-        assert_eq!(state.get_count(&arm).unwrap(), 2);
+        // Check estimate
+        assert_eq!(store.estimate(arm).unwrap(), 15.0); // (10 + 20) / 2
     }
 
     #[test]
-    fn test_reward_update() {
-        let state = BanditState::<NumericArm, NumericReward<f64>>::new();
-        let arm = NumericArm::new(1);
-        let reward = NumericReward::new(1.0).unwrap();
+    fn test_update_with_binary_rewards() {
+        let store: StateStore<StringArm, MeanAggregator> = StateStore::new();
+        let arm = StringArm::new("test".to_string());
 
-        // Test initial reward
-        assert!(state.get_reward(&arm).is_err());
+        store.add_arm(arm.clone(), MeanAggregator::new()).unwrap();
 
-        // Test update
-        state.update_reward(&arm, reward.clone()).unwrap();
-        assert_eq!(state.get_reward(&arm).unwrap().get_value().unwrap(), 1.0);
+        // Update with binary rewards (success = 1.0, failure = 0.0)
+        store.update(arm.clone(), BinaryReward::success()).unwrap();
+        store.update(arm.clone(), BinaryReward::success()).unwrap();
+        store.update(arm.clone(), BinaryReward::failure()).unwrap();
+
+        // Check estimate (2 successes, 1 failure = 2/3)
+        assert!((store.estimate(arm).unwrap() - 2.0 / 3.0).abs() < 1e-10);
     }
 
     #[test]
-    fn test_average_reward() {
-        let state = BanditState::<NumericArm, NumericReward<f64>>::new();
-        let arm = NumericArm::new(1);
-        let reward = NumericReward::new(1.0).unwrap();
+    fn test_pulls_counting() {
+        let store: StateStore<NumericArm, MeanAggregator> = StateStore::new();
+        let arm1 = NumericArm::new("test1".to_string());
+        let arm2 = NumericArm::new("test2".to_string());
 
-        // Test initial average
-        assert!(state.get_average_reward(&arm).is_err());
+        store.add_arm(arm1.clone(), MeanAggregator::new()).unwrap();
+        store.add_arm(arm2.clone(), MeanAggregator::new()).unwrap();
 
-        // Test after update
-        state.update_reward(&arm, reward).unwrap();
-        state.increment_count(&arm).unwrap();
-        assert_eq!(state.get_average_reward(&arm).unwrap(), 1.0);
+        // Pull arm1 twice
+        store.update(arm1.clone(), NumericReward::new(1.0).unwrap()).unwrap();
+        store.update(arm1.clone(), NumericReward::new(2.0).unwrap()).unwrap();
+
+        // Pull arm2 once
+        store.update(arm2.clone(), NumericReward::new(3.0).unwrap()).unwrap();
+
+        // Check individual pull counts
+        assert_eq!(store.pulls(arm1).unwrap(), 2);
+        assert_eq!(store.pulls(arm2).unwrap(), 1);
+
+        // Check total pulls
+        assert_eq!(store.total_pulls(), 3);
     }
 
     #[test]
-    fn test_reset() {
-        let state = BanditState::<NumericArm, NumericReward<f64>>::new();
-        let arm = NumericArm::new(1);
-        let reward = NumericReward::new(1.0).unwrap();
+    fn test_best_arm() {
+        let store: StateStore<NumericArm, MeanAggregator> = StateStore::new();
+        let arm1 = NumericArm::new("test1".to_string());
+        let arm2 = NumericArm::new("test2".to_string());
+        let arm3 = NumericArm::new("test3".to_string());
 
-        // Set up state
-        state.update_reward(&arm, reward).unwrap();
-        state.increment_count(&arm).unwrap();
+        store.add_arm(arm1.clone(), MeanAggregator::new()).unwrap();
+        store.add_arm(arm2.clone(), MeanAggregator::new()).unwrap();
+        store.add_arm(arm3.clone(), MeanAggregator::new()).unwrap();
 
-        // Reset
-        state.reset().unwrap();
+        // Update arms with different rewards
+        store.update(arm1.clone(), NumericReward::new(1.0).unwrap()).unwrap();
+        store.update(arm2.clone(), NumericReward::new(2.0).unwrap()).unwrap();
+        store.update(arm3.clone(), NumericReward::new(3.0).unwrap()).unwrap();
 
-        // Verify reset
-        assert!(state.get_count(&arm).is_err());
-        assert!(state.get_reward(&arm).is_err());
+        // arm3 should be the best (highest mean)
+        let best = store.best_arm().unwrap();
+        assert_eq!(best.id, arm3.id);
+        assert_eq!(best.name, arm3.name);
+    }
+
+    #[test]
+    fn test_error_cases() {
+        let store: StateStore<NumericArm, MeanAggregator> = StateStore::new();
+        let arm = NumericArm::new("test".to_string());
+
+        // Try to update non-existent arm
+        assert!(matches!(
+            store.update(arm.clone(), NumericReward::new(1.0).unwrap()),
+            Err(StateError::ArmNotFound)
+        ));
+
+        // Try to get estimate for non-existent arm
+        assert!(matches!(
+            store.estimate(arm.clone()),
+            Err(StateError::ArmNotFound)
+        ));
+
+        // Try to get pulls for non-existent arm
+        assert!(matches!(store.pulls(arm), Err(StateError::ArmNotFound)));
+    }
+
+    #[test]
+    fn test_empty_store() {
+        let store: StateStore<NumericArm, MeanAggregator> = StateStore::new();
+
+        // Total pulls should be 0 for empty store
+        assert_eq!(store.total_pulls(), 0);
+
+        // raise error if no arms are available for best arm
+        assert!(matches!(store.best_arm(), Err(StateError::NoArmsAvailable)));
     }
 }
