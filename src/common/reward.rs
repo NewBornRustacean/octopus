@@ -1,35 +1,24 @@
 use crate::common::error::RewardError;
-use num_traits::Float;
 
 /// Represents a reward in the bandit problem.
-///
-/// A reward must be:
-/// - `Clone`: For creating copies when needed
-/// - `Send`: For thread safety (can be transferred between threads)
-/// - `Sync`: For thread safety (can be shared between threads)
-pub trait Reward: Clone + Send + Sync {
-    /// Validates if the reward is in a valid state.
-    ///
-    /// # Returns
-    /// `Result<(), RewardError>` - Ok if valid, Err with reason if invalid
+pub trait Reward: Send + Sync {
     fn is_valid(&self) -> Result<(), RewardError>;
-
-    /// Gets the numeric value of the reward.
-    ///
-    /// # Returns
-    /// `Result<f64, RewardError>` - The reward value as f64, or an error if conversion fails
     fn get_value(&self) -> Result<f64, RewardError>;
 }
 
-/// A simple numeric reward implementation.
-///
-/// This is the most basic implementation of a reward, using a numeric value.
-#[derive(Debug, Clone)]
-pub struct NumericReward<T: Float> {
-    pub value: T,
+/// Trait for aggregating rewards over time (e.g., mean, sum).
+pub trait RewardAggregator: Send + Sync {
+    fn update(&mut self, reward: f64) -> Result<(), RewardError>;
+    fn mean(&self) -> Result<f64, RewardError>;
 }
 
-impl<T: Float + Send + Sync> Reward for NumericReward<T> {
+/// A simple numeric reward implementation.
+#[derive(Debug, Clone, Copy)]
+pub struct NumericReward {
+    value: f64,
+}
+
+impl Reward for NumericReward {
     fn is_valid(&self) -> Result<(), RewardError> {
         if self.value.is_finite() {
             Ok(())
@@ -39,13 +28,12 @@ impl<T: Float + Send + Sync> Reward for NumericReward<T> {
     }
 
     fn get_value(&self) -> Result<f64, RewardError> {
-        Ok(self.value.to_f64().ok_or_else(|| RewardError::InvalidRewardValue)?)
+        Ok(self.value)
     }
 }
 
-impl<T: Float + Send + Sync> NumericReward<T> {
-    /// Creates a new numeric reward with the given value.
-    pub fn new(value: T) -> Result<Self, RewardError> {
+impl NumericReward {
+    pub fn new(value: f64) -> Result<Self, RewardError> {
         let reward = Self { value };
         reward.is_valid()?;
         Ok(reward)
@@ -53,16 +41,14 @@ impl<T: Float + Send + Sync> NumericReward<T> {
 }
 
 /// A binary reward implementation.
-///
-/// This is used for binary outcomes (success/failure, 0/1) in bandit problems.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct BinaryReward {
-    pub value: bool,
+    value: bool,
 }
 
 impl Reward for BinaryReward {
     fn is_valid(&self) -> Result<(), RewardError> {
-        Ok(()) // Binary rewards are always valid
+        Ok(())
     }
 
     fn get_value(&self) -> Result<f64, RewardError> {
@@ -71,69 +57,193 @@ impl Reward for BinaryReward {
 }
 
 impl BinaryReward {
-    /// Creates a new binary reward.
     pub fn new(value: bool) -> Self {
         Self { value }
     }
 
-    /// Creates a success reward (1.0).
     pub fn success() -> Self {
-        Self { value: true }
+        Self::new(true)
     }
 
-    /// Creates a failure reward (0.0).
     pub fn failure() -> Self {
-        Self { value: false }
+        Self::new(false)
+    }
+}
+
+/// Aggregator that maintains a running mean.
+#[derive(Debug)]
+pub struct MeanAggregator {
+    count: usize,
+    total: f64,
+}
+
+impl MeanAggregator {
+    pub fn new() -> Self {
+        Self {
+            count: 0,
+            total: 0.0,
+        }
+    }
+}
+
+impl RewardAggregator for MeanAggregator {
+    fn update(&mut self, reward: f64) -> Result<(), RewardError> {
+        if !reward.is_finite() {
+            return Err(RewardError::InvalidRewardValue);
+        }
+        self.total += reward;
+        self.count += 1;
+        Ok(())
+    }
+
+    fn mean(&self) -> Result<f64, RewardError> {
+        if self.count == 0 {
+            Err(RewardError::InvalidRewardValue)
+        } else {
+            Ok(self.total / self.count as f64)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::f64;
 
-    #[test]
-    fn test_numeric_reward_creation() {
-        let reward = NumericReward::new(42.0).unwrap();
-        assert!(reward.is_valid().is_ok());
-        assert_eq!(reward.get_value().unwrap(), 42.0);
+    mod numeric_reward_tests {
+        use super::*;
+
+        #[test]
+        fn test_invalid_values() {
+            // NaN
+            assert!(NumericReward::new(f64::NAN).is_err());
+
+            // Infinity
+            assert!(NumericReward::new(f64::INFINITY).is_err());
+            assert!(NumericReward::new(f64::NEG_INFINITY).is_err());
+        }
+
+        #[test]
+        fn test_valid_values() {
+            // Zero
+            let zero = NumericReward::new(0.0).unwrap();
+            assert_eq!(zero.get_value().unwrap(), 0.0);
+
+            // Positive number
+            let positive = NumericReward::new(42.0).unwrap();
+            assert_eq!(positive.get_value().unwrap(), 42.0);
+
+            // Negative number
+            let negative = NumericReward::new(-42.0).unwrap();
+            assert_eq!(negative.get_value().unwrap(), -42.0);
+
+            // Small number
+            let small = NumericReward::new(1e-10).unwrap();
+            assert_eq!(small.get_value().unwrap(), 1e-10);
+
+            // Large number
+            let large = NumericReward::new(1e10).unwrap();
+            assert_eq!(large.get_value().unwrap(), 1e10);
+        }
     }
 
-    #[test]
-    fn test_numeric_reward_invalid() {
-        let reward = NumericReward::new(f64::INFINITY);
-        assert!(reward.is_err());
-        assert_eq!(matches!(reward, Err(RewardError::InvalidRewardValue)), true);
+    mod binary_reward_tests {
+        use super::*;
 
-        let reward = NumericReward::new(f64::NAN);
-        assert!(reward.is_err());
-        assert_eq!(matches!(reward, Err(RewardError::InvalidRewardValue)), true);
+        #[test]
+        fn test_creation() {
+            // True
+            let true_reward = BinaryReward::new(true);
+            assert_eq!(true_reward.get_value().unwrap(), 1.0);
 
-        let reward = NumericReward::new(f64::NEG_INFINITY);
-        assert!(reward.is_err());
-        assert_eq!(matches!(reward, Err(RewardError::InvalidRewardValue)), true);
+            // False
+            let false_reward = BinaryReward::new(false);
+            assert_eq!(false_reward.get_value().unwrap(), 0.0);
+
+            // Success helper
+            let success = BinaryReward::success();
+            assert_eq!(success.get_value().unwrap(), 1.0);
+
+            // Failure helper
+            let failure = BinaryReward::failure();
+            assert_eq!(failure.get_value().unwrap(), 0.0);
+        }
     }
 
-    #[test]
-    fn test_binary_reward_creation() {
-        let reward = BinaryReward::new(true);
-        assert!(reward.is_valid().is_ok());
-        assert_eq!(reward.get_value().unwrap(), 1.0);
-        assert!(reward.value); // Testing the value field directly
+    mod mean_aggregator_tests {
+        use super::*;
 
-        let reward = BinaryReward::new(false);
-        assert!(reward.is_valid().is_ok());
-        assert_eq!(reward.get_value().unwrap(), 0.0);
-        assert!(!reward.value); // Testing the value field directly
-    }
+        #[test]
+        fn test_invalid_updates() {
+            let mut agg = MeanAggregator::new();
 
-    #[test]
-    fn test_binary_reward_helpers() {
-        let success = BinaryReward::success();
-        assert_eq!(success.get_value().unwrap(), 1.0);
-        assert!(success.value); // Testing the value field directly
+            // NaN
+            assert!(agg.update(f64::NAN).is_err());
 
-        let failure = BinaryReward::failure();
-        assert_eq!(failure.get_value().unwrap(), 0.0);
-        assert!(!failure.value); // Testing the value field directly
+            // Infinity
+            assert!(agg.update(f64::INFINITY).is_err());
+            assert!(agg.update(f64::NEG_INFINITY).is_err());
+        }
+
+        #[test]
+        fn test_valid_updates() {
+            let mut agg = MeanAggregator::new();
+
+            // Zero
+            assert!(agg.update(0.0).is_ok());
+            assert_eq!(agg.mean().unwrap(), 0.0);
+
+            // Positive number
+            let mut agg = MeanAggregator::new();
+            assert!(agg.update(42.0).is_ok());
+            assert_eq!(agg.mean().unwrap(), 42.0);
+
+            // Negative number
+            let mut agg = MeanAggregator::new();
+            assert!(agg.update(-42.0).is_ok());
+            assert_eq!(agg.mean().unwrap(), -42.0);
+        }
+
+        #[test]
+        fn test_multiple_updates() {
+            let mut agg = MeanAggregator::new();
+
+            // Multiple positive numbers
+            assert!(agg.update(10.0).is_ok());
+            assert!(agg.update(20.0).is_ok());
+            assert!(agg.update(30.0).is_ok());
+            assert_eq!(agg.mean().unwrap(), 20.0);
+
+            // Mixed positive and negative
+            let mut agg = MeanAggregator::new();
+            assert!(agg.update(10.0).is_ok());
+            assert!(agg.update(-10.0).is_ok());
+            assert_eq!(agg.mean().unwrap(), 0.0);
+        }
+
+        #[test]
+        fn test_no_updates() {
+            let agg = MeanAggregator::new();
+            assert!(agg.mean().is_err());
+        }
+
+        #[test]
+        fn test_edge_cases() {
+            let mut agg = MeanAggregator::new();
+
+            // Maximum f64
+            assert!(agg.update(f64::MAX).is_ok());
+            assert_eq!(agg.mean().unwrap(), f64::MAX);
+
+            // Minimum f64
+            let mut agg = MeanAggregator::new();
+            assert!(agg.update(f64::MIN).is_ok());
+            assert_eq!(agg.mean().unwrap(), f64::MIN);
+
+            // Epsilon
+            let mut agg = MeanAggregator::new();
+            assert!(agg.update(f64::EPSILON).is_ok());
+            assert_eq!(agg.mean().unwrap(), f64::EPSILON);
+        }
     }
 }

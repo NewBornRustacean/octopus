@@ -25,24 +25,15 @@ pub enum RewardError {
 
 #[derive(Error, Debug)]
 pub enum StateError {
-    #[error("Invalid state operation: {0}")]
-    InvalidStateOperation(String),
+    #[error("Arm not found")]
+    ArmNotFound,
 
-    #[error("State update failed")]
-    StateUpdateFailed,
+    #[error("Arm already exists")]
+    ArmAlreadyExists,
 
-    #[error("Arm not found in state: {0}")]
-    ArmNotFoundInState(String),
+    #[error("Reward error: {0}")]
+    RewardError(#[from] RewardError),
 
-    #[error("State initialization failed: {0}")]
-    StateInitializationFailed(String),
-
-    #[error("State reset failed: {0}")]
-    StateResetFailed(String),
-
-    #[error("Concurrent state access error: {0}")]
-    ConcurrentStateAccessError(String),
-
-    #[error("Invalid reward update: {0}")]
-    InvalidRewardUpdate(String),
+    #[error("No arms available")]
+    NoArmsAvailable,
 }
