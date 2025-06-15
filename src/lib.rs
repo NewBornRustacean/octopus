@@ -1,5 +1,3 @@
-pub mod algorithm;
-pub mod common;
-
-use crate::algorithm::*;
-use crate::common::*;
+pub mod algorithms;
+pub mod traits;
+pub mod utils;
