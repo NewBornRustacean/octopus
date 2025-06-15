@@ -1,7 +1,7 @@
-use crate::traits::policy::BanditPolicy;
-use crate::traits::entities::{Context, Action, Reward};
 use crate::simulation::metrics::SimulationResults;
+use crate::traits::entities::{Action, Context, Reward};
 use crate::traits::environment::Environment;
+use crate::traits::policy::BanditPolicy;
 
 use ndarray::Dimension;
 use std::marker::PhantomData;

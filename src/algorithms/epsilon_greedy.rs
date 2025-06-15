@@ -216,7 +216,9 @@ mod tests {
                 name: "Action C",
             },
         ];
-        let policy = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(0.1, &actions).unwrap();
+        let policy =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(0.1, &actions)
+                .unwrap();
 
         assert_eq!(policy.epsilon, 0.1);
         assert_eq!(policy.all_actions.len(), 3);
@@ -230,37 +232,61 @@ mod tests {
 
     #[test]
     fn test_epsilon_greedy_init_invalid_epsilon() {
-        let actions = vec![DummyAction { id: 0, name: "Action A" }];
+        let actions = vec![DummyAction {
+            id: 0,
+            name: "Action A",
+        }];
 
-        let error_high = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(1.5, &actions)
-            .unwrap_err();
-        assert_eq!(error_high, OctopusError::InvalidParameter {
-            parameter_name: "epsilon".to_string(),
-            value: "1.5".to_string(),
-            expected_range: "0.0 to 1.0 inclusive".to_string(),
-        });
+        let error_high =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(1.5, &actions)
+                .unwrap_err();
+        assert_eq!(
+            error_high,
+            OctopusError::InvalidParameter {
+                parameter_name: "epsilon".to_string(),
+                value: "1.5".to_string(),
+                expected_range: "0.0 to 1.0 inclusive".to_string(),
+            }
+        );
 
-        let error_low = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(-0.1, &actions)
-            .unwrap_err();
-        assert_eq!(error_low, OctopusError::InvalidParameter {
-            parameter_name: "epsilon".to_string(),
-            value: "-0.1".to_string(),
-            expected_range: "0.0 to 1.0 inclusive".to_string(),
-        });
+        let error_low =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(-0.1, &actions)
+                .unwrap_err();
+        assert_eq!(
+            error_low,
+            OctopusError::InvalidParameter {
+                parameter_name: "epsilon".to_string(),
+                value: "-0.1".to_string(),
+                expected_range: "0.0 to 1.0 inclusive".to_string(),
+            }
+        );
     }
 
     #[test]
     fn test_epsilon_greedy_update_and_average() {
         let actions = vec![
-            DummyAction { id: 0, name: "Action A" },
-            DummyAction { id: 1, name: "Action B" },
+            DummyAction {
+                id: 0,
+                name: "Action A",
+            },
+            DummyAction {
+                id: 1,
+                name: "Action B",
+            },
         ];
-        let mut policy = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(0.0, &actions)
-            .unwrap();
+        let mut policy =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(0.0, &actions)
+                .unwrap();
         let dummy_context = DummyContext;
 
-        let action_a = DummyAction { id: 0, name: "Action A" };
-        let action_b = DummyAction { id: 1, name: "Action B" };
+        let action_a = DummyAction {
+            id: 0,
+            name: "Action A",
+        };
+        let action_b = DummyAction {
+            id: 1,
+            name: "Action B",
+        };
 
         // Update Action A
         policy.update(&dummy_context, &action_a, &DummyReward(10.0));
@@ -285,20 +311,58 @@ mod tests {
     #[test]
     fn test_epsilon_greedy_exploitation() {
         let actions = vec![
-            DummyAction { id: 0, name: "Bad Action" },
-            DummyAction { id: 1, name: "Good Action" },
-            DummyAction { id: 2, name: "Mediocre Action" },
+            DummyAction {
+                id: 0,
+                name: "Bad Action",
+            },
+            DummyAction {
+                id: 1,
+                name: "Good Action",
+            },
+            DummyAction {
+                id: 2,
+                name: "Mediocre Action",
+            },
         ];
         // Epsilon = 0.0 means always exploit
-        let mut policy = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(0.0, &actions)
-            .unwrap();
+        let mut policy =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(0.0, &actions)
+                .unwrap();
         let dummy_context = DummyContext;
 
         // Simulate some pulls to establish average rewards
-        policy.update(&dummy_context, &DummyAction { id: 0, name: "Bad Action" }, &DummyReward(1.0)); // Avg: 1.0
-        policy.update(&dummy_context, &DummyAction { id: 1, name: "Good Action" }, &DummyReward(10.0)); // Avg: 10.0
-        policy.update(&dummy_context, &DummyAction { id: 1, name: "Good Action" }, &DummyReward(12.0)); // Avg: 11.0
-        policy.update(&dummy_context, &DummyAction { id: 2, name: "Mediocre Action" }, &DummyReward(5.0)); // Avg: 5.0
+        policy.update(
+            &dummy_context,
+            &DummyAction {
+                id: 0,
+                name: "Bad Action",
+            },
+            &DummyReward(1.0),
+        ); // Avg: 1.0
+        policy.update(
+            &dummy_context,
+            &DummyAction {
+                id: 1,
+                name: "Good Action",
+            },
+            &DummyReward(10.0),
+        ); // Avg: 10.0
+        policy.update(
+            &dummy_context,
+            &DummyAction {
+                id: 1,
+                name: "Good Action",
+            },
+            &DummyReward(12.0),
+        ); // Avg: 11.0
+        policy.update(
+            &dummy_context,
+            &DummyAction {
+                id: 2,
+                name: "Mediocre Action",
+            },
+            &DummyReward(5.0),
+        ); // Avg: 5.0
 
         // The "Good Action" (id 1) should have the highest average reward
         assert_eq!(policy.get_average_reward(0), 1.0);
@@ -308,18 +372,32 @@ mod tests {
         // Policy should consistently choose the "Good Action"
         for _ in 0..100 {
             let chosen_action = policy.choose_action(&dummy_context);
-            assert_eq!(chosen_action, DummyAction { id: 1, name: "Good Action" });
+            assert_eq!(
+                chosen_action,
+                DummyAction {
+                    id: 1,
+                    name: "Good Action"
+                }
+            );
         }
     }
 
     #[test]
     fn test_epsilon_greedy_exploration() {
         let actions = vec![
-            DummyAction { id: 0, name: "Action A" },
-            DummyAction { id: 1, name: "Action B" },
+            DummyAction {
+                id: 0,
+                name: "Action A",
+            },
+            DummyAction {
+                id: 1,
+                name: "Action B",
+            },
         ];
         // Epsilon = 1.0 means always explore (random choice)
-        let policy = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(1.0, &actions).unwrap();
+        let policy =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(1.0, &actions)
+                .unwrap();
         let dummy_context = DummyContext;
 
         let mut counts_chosen: HashMap<usize, u64> = HashMap::new();
@@ -340,24 +418,53 @@ mod tests {
         let expected_per_action = num_trials as f64 / actions.len() as f64;
         let tolerance = expected_per_action * 0.2; // Allow 20% deviation for randomness
 
-        assert!((chosen_a as f64 - expected_per_action).abs() < tolerance, "Chosen A: {}", chosen_a);
-        assert!((chosen_b as f64 - expected_per_action).abs() < tolerance, "Chosen B: {}", chosen_b);
+        assert!(
+            (chosen_a as f64 - expected_per_action).abs() < tolerance,
+            "Chosen A: {}",
+            chosen_a
+        );
+        assert!(
+            (chosen_b as f64 - expected_per_action).abs() < tolerance,
+            "Chosen B: {}",
+            chosen_b
+        );
         assert_eq!(chosen_a + chosen_b, num_trials as u64);
     }
 
     #[test]
     fn test_epsilon_greedy_reset() {
         let actions = vec![
-            DummyAction { id: 0, name: "Action A" },
-            DummyAction { id: 1, name: "Action B" },
+            DummyAction {
+                id: 0,
+                name: "Action A",
+            },
+            DummyAction {
+                id: 1,
+                name: "Action B",
+            },
         ];
-        let mut policy = EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(1.0, &actions)
-            .unwrap();
+        let mut policy =
+            EpsilonGreedyPolicy::<DummyContext, DummyAction, DummyReward, Ix1>::new(1.0, &actions)
+                .unwrap();
 
         let dummy_context = DummyContext;
 
-        policy.update(&dummy_context, &DummyAction { id: 0, name: "Action A" }, &DummyReward(10.0));
-        policy.update(&dummy_context, &DummyAction { id: 1, name: "Action B" }, &DummyReward(20.0));
+        policy.update(
+            &dummy_context,
+            &DummyAction {
+                id: 0,
+                name: "Action A",
+            },
+            &DummyReward(10.0),
+        );
+        policy.update(
+            &dummy_context,
+            &DummyAction {
+                id: 1,
+                name: "Action B",
+            },
+            &DummyReward(20.0),
+        );
 
         assert_eq!(policy.total_pulls, 2);
         assert_eq!(*policy.counts.get(&0).unwrap(), 1);

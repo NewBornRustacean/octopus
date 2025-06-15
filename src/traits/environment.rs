@@ -1,4 +1,4 @@
-use crate::traits::entities::{Context, Action, Reward};
+use crate::traits::entities::{Action, Context, Reward};
 use ndarray::Dimension;
 
 /// Defines the interface for a simulated environment that interacts with a bandit policy.
@@ -20,5 +20,4 @@ where
     /// Returns the optimal reward that could have been obtained in the given context.
     /// This is crucial for calculating regret in simulations.
     fn get_optimal_reward(&self, context: &C) -> R;
-
 }

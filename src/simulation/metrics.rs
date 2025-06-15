@@ -1,4 +1,3 @@
-
 /// Stores the results of a single bandit simulation episode.
 #[derive(Debug, Clone, PartialEq)] // Derive common traits for convenience
 pub struct SimulationResults {
@@ -10,7 +9,7 @@ pub struct SimulationResults {
     /// A vector of rewards obtained at each step of the simulation.
     pub steps_rewards: Vec<f64>,
     /// A vector of cumulative regret at each step of the simulation.
-    pub steps_regret: Vec<f64>, 
+    pub steps_regret: Vec<f64>,
 }
 
 impl SimulationResults {
