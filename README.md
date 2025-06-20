@@ -1,4 +1,4 @@
-# octopus
+# 🐙 octopus
 
 ## 🎯 **Mission Statement**
 
