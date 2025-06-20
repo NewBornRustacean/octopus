@@ -1,5 +1,4 @@
 use crate::traits::entities::{Action, Context, Reward};
-use ndarray::Dimension;
 
 /// Defines the contract for any Multi-Armed Bandit (MAB) algorithm or policy.
 ///
@@ -16,12 +15,11 @@ use ndarray::Dimension;
 /// - `Send + Sync + 'static`: Essential for multi-threaded environments, allowing policy
 ///   instances to be safely sent between threads (e.g., in a `PolicyServer` handling
 ///   concurrent requests) or shared across them.
-pub trait BanditPolicy<C, A, R, D>: Send + Sync + 'static
+pub trait BanditPolicy<A, R, C>: Send + Sync + 'static
 where
-    C: Context<D>,
     A: Action,
     R: Reward,
-    D: Dimension,
+    C: Context,
 {
     /// Chooses an action based on the current context.
     ///

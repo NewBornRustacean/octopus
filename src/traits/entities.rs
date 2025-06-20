@@ -1,6 +1,8 @@
+use crate::utils::error::OctopusError;
 use ndarray::{Array, Array1, Dimension, Ix1};
+use std::collections::HashMap;
 use std::hash::Hash; // For 1-dimensional feature vectors
-// use ndarray::ArrayD; // Keeping this here to remind about future ArrayD expansion
+use std::ops::{Deref, DerefMut};
 
 /// Defines the contract for any type that can represent an action (or arm) in a
 /// Multi-Armed Bandit problem.
@@ -15,6 +17,10 @@ use std::hash::Hash; // For 1-dimensional feature vectors
 ///   actions can be safely sent between threads or shared across them, and live
 ///   for the duration of the application.
 pub trait Action: Clone + Eq + Hash + Send + Sync + 'static {
+    /// Action carries its own type as ValueType to delegate complexity to trait-associated types
+    /// instead of piling them all on the outer trait.
+    type ValueType;
+
     /// Returns a unique identifier for this action.
     ///
     /// This ID is typically used internally by bandit algorithms to map actions
@@ -26,6 +32,40 @@ pub trait Action: Clone + Eq + Hash + Send + Sync + 'static {
     /// Useful for logging and debugging.
     fn name(&self) -> String {
         format!("Action-{}", self.id())
+    }
+
+    /// Returns a value from Action.
+    fn value(&self) -> Self::ValueType;
+}
+
+#[derive(Debug, Clone)]
+pub struct ActionStorage<A: Action>(HashMap<usize, A>);
+
+impl<A: Action + Clone> ActionStorage<A> {
+    pub fn new(initial_actions: &[A]) -> Result<Self, OctopusError> {
+        let actions = initial_actions
+            .into_iter()
+            .map(|action| (action.id(), action.clone()))
+            .collect();
+
+        Ok(ActionStorage { 0: actions })
+    }
+    pub fn get_all_actions(&self) -> Vec<A> {
+        self.0.values().cloned().collect()
+    }
+}
+
+impl<A: Action> Deref for ActionStorage<A> {
+    type Target = HashMap<usize, A>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<A: Action> DerefMut for ActionStorage<A> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -56,7 +96,9 @@ pub trait Reward: Clone + Send + Sync + 'static {
 /// - `Send + Sync + 'static`: Essential for multi-threaded environments, ensuring
 ///   contexts can be safely sent between threads (e.g., in a `PolicyServer` handling
 ///   concurrent requests) or shared across them, and live for the duration of the application.
-pub trait Context<D: Dimension>: Clone + Send + Sync + 'static {
+pub trait Context: Clone + Send + Sync + 'static {
+    /// Context dimension type
+    type DimType: Dimension;
     /// Converts the context into a 1-dimensional `ndarray::Array1<f64>` of numerical features.
     ///
     /// This is the primary way contextual information is consumed by most
@@ -66,13 +108,16 @@ pub trait Context<D: Dimension>: Clone + Send + Sync + 'static {
     /// While we initially focus on `Array1`, the underlying context type can conceptually
     /// represent higher-dimensional data which could be flattened here, or a future
     /// extension could introduce a `as_higher_dim_features() -> ArrayD<f64>` method.
-    fn to_ndarray(&self) -> Array<f64, D>;
+    fn to_ndarray(&self) -> Array<f64, Self::DimType>;
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DummyContext;
-impl Context<Ix1> for DummyContext {
-    fn to_ndarray(&self) -> Array<f64, Ix1> {
+
+impl Context for DummyContext {
+    type DimType = Ix1;
+
+    fn to_ndarray(&self) -> Array<f64, Self::DimType> {
         Array1::from_vec(vec![0.0])
     }
 }
