@@ -10,17 +10,12 @@ use crate::utils::error::OctopusError;
 use ndarray::Dimension;
 use rand::{Rng, SeedableRng};
 
-/// Represents an Epsilon-Greedy Multi-Armed Bandit policy.
+/// Epsilon-Greedy policy for Multi-Armed Bandit problems.
 ///
-/// This policy explores with a probability of `epsilon` (choosing a random arm)
-/// and exploits (choosing the arm with the highest observed average reward)
-/// with a probability of `1 - epsilon`.
+/// With probability `epsilon`, selects a random action (exploration).
+/// With probability `1 - epsilon`, selects the action with the highest average reward (exploitation).
 ///
-/// Type Parameters:
-/// - `A`: The type representing an action (arm). Must implement `Action`.
-/// - `R`: The type representing the reward received. Must implement `Reward`.
-/// - `D`: The `ndarray` Dimension type of the features produced by the `Context`.
-///        Though Epsilon-Greedy is non-contextual, it needs this for trait bounds.
+/// Generic over action, reward, and context types. Context is ignored (non-contextual), but required for trait bounds.
 #[derive(Debug)]
 pub struct EpsilonGreedyPolicy<A, R, C>
 where
@@ -43,14 +38,12 @@ where
     A: Action,
     R: Reward,
 {
-    /// Creates a new `EpsilonGreedyPolicy`.
+    /// Creates a new EpsilonGreedyPolicy.
     ///
-    /// # Arguments
-    /// * `epsilon` - The probability of exploration (0.0 to 1.0).
-    /// * `action_map` - A vector containing all possible actions this policy can take.
+    /// * `epsilon` - Probability of exploration (0.0 to 1.0).
+    /// * `initial_actions` - Slice of all possible actions.
     ///
-    /// # Panics
-    /// Panics if `epsilon` is not within [0.0, 1.0] or if `action_map` is empty.
+    /// Returns an error if `epsilon` is out of bounds or if actions are empty.
     pub fn new(epsilon: f64, initial_actions: &[A]) -> Result<Self, OctopusError> {
         if !(0.0..=1.0).contains(&epsilon) {
             return Err(OctopusError::InvalidParameter {
@@ -61,10 +54,8 @@ where
         }
         let counts: HashMap<usize, u64> =
             initial_actions.iter().map(|action| (action.id(), 0)).collect();
-
         let sum_rewards: HashMap<usize, f64> =
             initial_actions.iter().map(|action| (action.id(), 0.0)).collect();
-
         Ok(EpsilonGreedyPolicy {
             epsilon,
             counts,
@@ -76,19 +67,12 @@ where
         })
     }
 
-    /// Calculates the estimated average reward for a given action.
-    /// Returns 0.0 if the action has not been pulled yet to avoid division by zero,
-    /// or for tie-breaking in favor of unpulled arms (implicitly).
+    /// Returns the average reward for the given action ID.
+    /// Returns 0.0 if the action has not been selected yet.
     fn get_average_reward(&self, action_id: usize) -> f64 {
-        let count = *self.counts.get(&action_id).unwrap_or(&0); // Should always exist after initialization
-        let sum_reward = *self.sum_rewards.get(&action_id).unwrap_or(&0.0); // Should always exist
-
+        let count = *self.counts.get(&action_id).unwrap_or(&0);
+        let sum_reward = *self.sum_rewards.get(&action_id).unwrap_or(&0.0);
         if count == 0 {
-            // For unpulled arms, we can define their average reward in a way that
-            // makes sense for the greedy choice. Returning 0.0 ensures they are not
-            // picked greedily unless all other arms also have 0.0 or less.
-            // An alternative is to return `f64::INFINITY` to prioritize exploration of unpulled arms.
-            // For Epsilon-Greedy, random exploration handles this naturally.
             0.0
         } else {
             sum_reward / count as f64
@@ -102,30 +86,20 @@ where
     A: Action + 'static,
     R: Reward,
 {
-    /// Chooses an action based on the Epsilon-Greedy strategy.
-    ///
-    /// # Arguments
-    /// * `_context` - The context (ignored by non-contextual Epsilon-Greedy).
-    ///
-    /// # Returns
-    /// The chosen action.
+    /// Selects an action using the epsilon-greedy strategy.
+    /// Ignores context (non-contextual).
     fn choose_action(&self, _context: &C) -> A {
         let mut rng = self.rng.lock().unwrap();
-
         let random_float: f64 = rng.random_range(0.0..1.0);
         if random_float < self.epsilon {
-            // Explore: choose a random action
+            // Explore: random action
             let action_ids: Vec<&usize> = self.action_map.keys().collect();
             let rand_id = action_ids.choose(&mut rng).unwrap();
             self.action_map.get(rand_id).unwrap().clone()
         } else {
-            // Exploit: choose the action with the highest estimated average reward
-            // Initialize best_action_id with the ID of any action (the first one from keys() iterator)
-            // We know `action_map` is not empty due to the constructor's checks.
+            // Exploit: action with highest average reward
             let mut best_action_id: usize = *self.action_map.keys().next().unwrap();
             let mut max_avg_reward: f64 = self.get_average_reward(best_action_id);
-
-            // Iterate over the keys (action IDs) in the HashMap to find the best one
             for &action_id in self.action_map.keys() {
                 let current_avg = self.get_average_reward(action_id);
                 if current_avg > max_avg_reward {
@@ -133,17 +107,12 @@ where
                     best_action_id = action_id;
                 }
             }
-
             self.action_map.get(&best_action_id).unwrap().clone()
         }
     }
 
-    /// Updates the policy's internal state based on the observed action and reward.
-    ///
-    /// # Arguments
-    /// * `_context` - The context (ignored by non-contextual Epsilon-Greedy).
-    /// * `action` - The action that was taken.
-    /// * `reward` - The reward received for the action.
+    /// Updates the statistics for the selected action and received reward.
+    /// Ignores context (non-contextual).
     fn update(&mut self, _context: &C, action: &A, reward: &R) {
         let action_id = action.id();
         *self.counts.entry(action_id).or_insert(0) += 1;
@@ -151,9 +120,7 @@ where
         self.total_pulls += 1;
     }
 
-    /// Resets the policy's internal state.
-    ///
-    /// Clears all counts and sum of rewards for all arms.
+    /// Resets all statistics to their initial state.
     fn reset(&mut self) {
         self.total_pulls = 0;
         for &action_id in self.action_map.keys() {

@@ -1,19 +1,18 @@
 /// Stores the results of a single bandit simulation episode.
 #[derive(Debug, Clone, PartialEq)] // Derive common traits for convenience
 pub struct SimulationResults {
-    /// The total sum of rewards accumulated by the policy over the simulation.
+    /// Total reward accumulated by the policy.
     pub cumulative_reward: f64,
-    /// The total sum of rewards that would have been obtained if the optimal arm
-    /// was chosen at every step (only available in simulations).
+    /// Total reward that would have been obtained by always choosing the optimal action.
     pub cumulative_optimal_reward: f64,
-    /// A vector of rewards obtained at each step of the simulation.
+    /// Reward received at each step.
     pub steps_rewards: Vec<f64>,
-    /// A vector of cumulative regret at each step of the simulation.
+    /// Cumulative regret at each step.
     pub steps_regret: Vec<f64>,
 }
 
 impl SimulationResults {
-    /// Creates a new `SimulationResults` instance.
+    /// Creates a new SimulationResults instance.
     pub fn new(
         cumulative_reward: f64,
         cumulative_optimal_reward: f64,
@@ -28,7 +27,7 @@ impl SimulationResults {
         }
     }
 
-    /// Calculates the final simple regret (difference from optimal at the last step).
+    /// Returns the final simple regret (difference from optimal at the last step).
     pub fn final_simple_regret(&self) -> f64 {
         self.cumulative_optimal_reward - self.cumulative_reward
     }

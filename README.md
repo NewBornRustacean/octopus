@@ -2,102 +2,117 @@
 
 ## 🎯 **Mission Statement**
 
-Multi-threaded, and ergonomic Rust crate for Multi-Armed Bandit algorithms — with a clear path to contextual bandits and custom reward modeling. Built for engineers, not for academia.
+A generic, multi-threaded, and ergonomic Rust crate for Multi-Armed Bandit (MAB) algorithms—designed for engineers who need extensibility, custom reward modeling, and a clear path to contextual bandits.
 
 ## ✅ **Goals**
 
 1. **Support key MAB algorithms**:
-
-   * MVP: `Epsilon-Greedy`, `UCB1`
-   * Future: `Thompson Sampling`, `LinUCB`, etc.
-
-2. **Built-in multi-threading** to offload computational bottlenecks typical in Python/GIL-bound environments.
-
-3. **Clean, extensible abstraction** for stateless and contextual bandits.
-
-4. **User-defined reward types** and optionally, custom arm identifiers (flexible typing via generics or trait bounds).
-
-5. **Ergonomic configuration** via builder pattern.
-
-6. **Target audience**: ML engineers & backend engineers running real-time services in Rust.
+   * MVP: `Epsilon-Greedy`, `UCB1`, `Thompson Sampling`
+   * Future: `LinUCB`, etc.
+2. **Built-in multi-threading** for computational bottlenecks (e.g., regret calculation, reward evaluation).
+3. **Clean, extensible abstraction** for stateless and contextual bandits, using Rust traits and generics.
+4. **User-defined reward types** and flexible action/context typing via trait bounds.
+5. **Target audience**: ML engineers & backend engineers running real-time services in Rust.
 
 ## 🚫 **Non-Goals**
 
-* No general-purpose RL framework (e.g., no DQN, A3C, etc.)
-* Not a research toolkit — no simulation DSLs or experiment runners.
+* Not a general-purpose RL framework (e.g., no DQN, A3C, etc.)
+* Not a rich visualization tool
 
 ## 🧱 **Core Abstractions**
 
 ```rust
-// Trait for stateless bandit algorithms
-pub trait Bandit<Arm, Reward> {
-    fn select_arm(&self) -> Arm;
-    fn update(&mut self, arm: &Arm, reward: Reward);
+// Action: Represents an arm/action in the bandit problem
+pub trait Action: Clone + Eq + Hash + Send + Sync + 'static {
+    type ValueType;
+    fn id(&self) -> usize;
+    fn name(&self) -> String { ... }
+    fn value(&self) -> Self::ValueType;
 }
 
-// Trait for contextual bandits
-pub trait ContextualBandit<Arm, Context, Reward> {
-    fn select_arm(&self, context: &Context) -> Arm;
-    fn update(&mut self, context: &Context, arm: &Arm, reward: Reward);
+// Reward: Represents the reward signal
+pub trait Reward: Clone + Send + Sync + 'static {
+    fn value(&self) -> f64;
 }
+
+// Context: Represents contextual information (for contextual bandits)
+pub trait Context: Clone + Send + Sync + 'static {
+    type DimType: ndarray::Dimension;
+    fn to_ndarray(&self) -> ndarray::Array<f64, Self::DimType>;
+}
+
+// BanditPolicy: Core trait for all bandit algorithms
+pub trait BanditPolicy<A, R, C>: Send + Sync + 'static
+where
+    A: Action,
+    R: Reward,
+    C: Context,
+{
+    fn choose_action(&self, context: &C) -> A;
+    fn update(&mut self, context: &C, action: &A, reward: &R);
+    fn reset(&mut self);
+}
+
+// Environment: Simulated environment for running experiments
+pub trait Environment<A, R, C>: Send + Sync + 'static { ... }
 ```
 
-* `Arm`: generic, must be `Clone + Eq + Hash + Send + Sync`
-* `Reward`: customizable (e.g. struct with `ctr`, `revenue`, etc.), must be `Clone + Send + Sync`
-* `Context`: flexible type, must be `Clone + Send + Sync`
+* **Extensibility**: Implement these traits for your own types to plug into the framework.
+* **Action/Reward/Context**: Highly generic, must satisfy trait bounds above.
 
-## 🧪 **Initial Algorithms**
+## 🧪 **Implemented Algorithms**
 
-### `epsilon_greedy::EpsilonGreedy`
+### `epsilon_greedy::EpsilonGreedyPolicy`
 
-* Parameters: `epsilon: f64`
-* Uses average reward tracking per arm
+* Parameters: `epsilon: f64`, initial actions
+* Tracks average reward and count per action
+* Generic over action, reward, and context types
 
-### `ucb::UCB1`
+## 🏗️ **Simulation Engine**
 
-* Parameters: none (classical version)
-* Tracks counts and empirical means
+* The `Simulator` struct orchestrates the interaction between a bandit policy and an environment.
+* Collects cumulative rewards, regret, and per-step metrics via `SimulationResults`.
+
+**Example:**
+
+```rust
+use octopus::algorithms::epsilon_greedy::EpsilonGreedyPolicy;
+use octopus::simulation::simulator::Simulator;
+use octopus::traits::entities::{Action, Reward, Context, DummyContext};
+
+// Define your own Action, Reward, and Environment types implementing the required traits
+// ...
+
+let actions = vec![/* your actions here */];
+let mut policy = EpsilonGreedyPolicy::new(0.1, &actions).unwrap();
+let environment = /* your environment here */;
+let mut simulator = Simulator::new(policy, environment);
+let results = simulator.run(1000, &actions);
+println!("Cumulative reward: {}", results.cumulative_reward);
+```
 
 ## 🔁 **Concurrency Design**
 
-* Parallelism across arms(not across rounds)
-* Internals will use multi-threaded computation with `rayon` or scoped threads.
-* Safe internal mutability using `RwLock`/`Mutex`/`Atomic` depending on performance testing.
-* Designed so user **does not need to manage concurrency** explicitly.
-  
-
-Example:
-
-```rust
-let bandit = UCB1::new(num_arms);
-let chosen = bandit.select_arm(); // thread-safe
-bandit.update(&chosen, reward);   // thread-safe
-```
-
-## ⚙️ **Configuration Example (Builder Pattern)**
-
-```rust
-let bandit = EpsilonGreedy::builder()
-    .epsilon(0.1)
-    .arms(vec!["red", "blue", "green"])
-    .build();
-```
+* Internal parallelism (e.g., for regret calculation) uses `rayon` and thread-safe primitives (`Mutex`).
+* User-facing API is single-threaded for simplicity; internal operations are parallelized where beneficial.
+* No explicit builder pattern or thread-safe wrappers in the current API.
 
 ## 📦 **Integration & Ecosystem**
 
-* `serde` optional feature for serialization
-* `rayon` for multi-threaded internal ops
-* Optional `log` or `tracing` support
+* Uses `ndarray` for context features
+* Uses `rayon` for parallelism
+* Error handling via `thiserror`
+* (Planned) Optional `serde` for serialization
 
 ## 🧩 **Future Roadmap**
 
-* [ ] Add `ThompsonSampling` with support for conjugate priors
-* [ ] Add `LinUCB` for contextual bandits
-* [ ] Benchmark suite comparing with Python implementations (on real-world reward logs)
-* [ ] Async reward update support (if requested)
+* [ ] Add `UCB1`, `ThompsonSampling`, and `LinUCB`
+* [ ] Benchmark suite comparing with Python implementations
+* [ ] Async/streaming reward update support
+* [ ] Optional logging/tracing integration
 
 ## 🧪 **Test Strategy**
 
-* Unit tests for all algorithms (stateless and contextual)
+* Unit tests for all algorithms and simulation logic
 * Integration tests with simulated reward distributions
-* Stress tests for multi-threaded update scenarios
+* Stress tests for multi-threaded scenarios
