@@ -6,8 +6,9 @@ use crate::traits::policy::BanditPolicy;
 use ndarray::Dimension;
 use std::marker::PhantomData;
 
-/// The core simulator for running Multi-Armed Bandit experiments.
-/// It orchestrates the interaction between a bandit policy and a simulated environment.
+/// Simulator for running Multi-Armed Bandit experiments.
+///
+/// Orchestrates the interaction between a bandit policy and an environment, collecting metrics for analysis.
 pub struct Simulator<P, A, R, C, E>
 where
     P: BanditPolicy<A, R, C>,
@@ -29,11 +30,10 @@ where
     R: Reward,
     E: Environment<A, R, C>,
 {
-    /// Creates a new Simulator instance.
+    /// Creates a new Simulator.
     ///
-    /// # Arguments
-    /// * `policy` - The bandit policy to be evaluated.
-    /// * `environment` - The simulated environment providing contexts and rewards.
+    /// * `policy` - The bandit policy to evaluate.
+    /// * `environment` - The environment providing contexts and rewards.
     pub fn new(policy: P, environment: E) -> Self {
         Simulator {
             policy,
@@ -42,13 +42,12 @@ where
         }
     }
 
-    /// Runs a single simulation episode for a specified number of steps.
+    /// Runs a simulation episode for a given number of steps.
     ///
-    /// # Arguments
-    /// * `num_steps` - The total number of interactions (time steps) to simulate.
+    /// * `num_steps` - Number of time steps to simulate.
+    /// * `all_actions` - Slice of all possible actions (for regret calculation).
     ///
-    /// # Returns
-    /// A `SimulationResults` object containing cumulative rewards, regret, and other metrics.
+    /// Returns a SimulationResults object with cumulative rewards and regret.
     pub fn run(&mut self, num_steps: usize, all_actions: &[A]) -> SimulationResults {
         let mut cumulative_reward: f64 = 0.0;
         let mut cumulative_optimal_reward: f64 = 0.0;
@@ -63,8 +62,7 @@ where
             self.policy.update(&current_context, &chosen_action, &reward);
             cumulative_reward += reward.value();
 
-            // To calculate regret, we need the optimal reward in this context.
-            // This assumes the environment can provide it (critical for simulations).
+            // Regret calculation: difference between optimal and actual reward.
             let optimal_reward_for_context =
                 self.environment.get_optimal_reward(&current_context, all_actions);
             cumulative_optimal_reward += optimal_reward_for_context.value();
@@ -72,7 +70,7 @@ where
             let current_regret = cumulative_optimal_reward - cumulative_reward;
 
             steps_rewards.push(reward.value());
-            steps_regret.push(current_regret); // Store regret at each step
+            steps_regret.push(current_regret);
         }
 
         SimulationResults::new(
