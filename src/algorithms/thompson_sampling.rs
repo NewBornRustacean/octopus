@@ -17,8 +17,8 @@ where
     A: Action,
     R: Reward,
 {
-    alpha_params: HashMap<usize, f64>,
-    beta_params: HashMap<usize, f64>,
+    alpha_params: HashMap<u32, f64>,
+    beta_params: HashMap<u32, f64>,
     action_map: ActionStorage<A>,
     rng: Mutex<StdRng>,
     _phantom: PhantomData<(R, C)>,
@@ -40,9 +40,9 @@ where
             });
         }
 
-        let alpha_params: HashMap<usize, f64> =
+        let alpha_params: HashMap<u32, f64> =
             initial_actions.iter().map(|action| (action.id(), 1.0)).collect();
-        let beta_params: HashMap<usize, f64> =
+        let beta_params: HashMap<u32, f64> =
             initial_actions.iter().map(|action| (action.id(), 1.0)).collect();
 
         // Expand u64 seed to [u8; 32]
@@ -137,26 +137,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::entities::{Action, DummyContext};
+    use crate::traits::entities::{DummyContext, NumericAction};
     use crate::utils::error::OctopusError;
-    use std::collections::HashMap;
-
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    struct I32Action {
-        id: usize,
-        value: i32,
-        name: &'static str,
-    }
-
-    impl Action for I32Action {
-        type ValueType = i32;
-        fn id(&self) -> usize {
-            self.id
-        }
-        fn value(&self) -> i32 {
-            self.value
-        }
-    }
 
     #[derive(Debug, Clone, PartialEq)]
     struct DummyReward(f64);
@@ -170,22 +152,23 @@ mod tests {
     #[test]
     fn test_thompson_init_success() {
         let actions = vec![
-            I32Action { id: 0, value: 10, name: "A" },
-            I32Action { id: 1, value: 20, name: "B" },
+            NumericAction::new(10i32, "A"),
+            NumericAction::new(20i32, "B"),
         ];
-        let policy = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 42).unwrap();
+        let policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 42)
+            .unwrap();
         assert_eq!(policy.alpha_params.len(), 2);
         assert_eq!(policy.beta_params.len(), 2);
         for a in actions {
-            assert_eq!(*policy.alpha_params.get(&a.id).unwrap(), 1.0);
-            assert_eq!(*policy.beta_params.get(&a.id).unwrap(), 1.0);
+            assert_eq!(*policy.alpha_params.get(&a.id()).unwrap(), 1.0);
+            assert_eq!(*policy.beta_params.get(&a.id()).unwrap(), 1.0);
         }
     }
 
     #[test]
     fn test_thompson_init_empty_error() {
-        let actions: Vec<I32Action> = vec![];
-        let err = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 42).unwrap_err();
+        let actions: Vec<NumericAction<i32>> = vec![];
+        let err = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 42).unwrap_err();
         assert_eq!(
             err,
             OctopusError::InvalidParameter {
@@ -199,10 +182,11 @@ mod tests {
     #[test]
     fn test_thompson_choose_action_does_not_panic() {
         let actions = vec![
-            I32Action { id: 0, value: 10, name: "A" },
-            I32Action { id: 1, value: 20, name: "B" },
+            NumericAction::new(10i32, "A"),
+            NumericAction::new(20i32, "B"),
         ];
-        let policy = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 12345).unwrap();
+        let policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 12345)
+            .unwrap();
         let ctx = DummyContext;
         let action = policy.choose_action(&ctx);
         assert!(actions.contains(&action));
@@ -211,39 +195,46 @@ mod tests {
     #[test]
     fn test_thompson_update_modifies_params() {
         let actions = vec![
-            I32Action { id: 0, value: 10, name: "A" },
-            I32Action { id: 1, value: 20, name: "B" },
+            NumericAction::new(10i32, "A"),
+            NumericAction::new(20i32, "B"),
         ];
-        let mut policy = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 777).unwrap();
+        let id0 = actions.get(0).unwrap().id();
+        
+        let mut policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 777)
+            .unwrap();
         let ctx = DummyContext;
 
-        let a = I32Action { id: 0, value: 10, name: "A" };
+        let a = actions.get(0).unwrap(); 
 
         // Simulate a reward of 1.0 (success)
-        policy.update(&ctx, &a, &DummyReward(1.0));
-        assert_eq!(*policy.alpha_params.get(&0).unwrap(), 2.0);
-        assert_eq!(*policy.beta_params.get(&0).unwrap(), 1.0);
+        policy.update(&ctx, a, &DummyReward(1.0));
+        assert_eq!(*policy.alpha_params.get(&id0).unwrap(), 2.0);
+        assert_eq!(*policy.beta_params.get(&id0).unwrap(), 1.0);
 
         // Simulate a reward of 0.0 (failure)
-        policy.update(&ctx, &a, &DummyReward(0.0));
-        assert_eq!(*policy.alpha_params.get(&0).unwrap(), 2.0);
-        assert_eq!(*policy.beta_params.get(&0).unwrap(), 2.0);
+        policy.update(&ctx, a, &DummyReward(0.0));
+        assert_eq!(*policy.alpha_params.get(&id0).unwrap(), 2.0);
+        assert_eq!(*policy.beta_params.get(&id0).unwrap(), 2.0);
     }
 
     #[test]
     fn test_thompson_reset() {
         let actions = vec![
-            I32Action { id: 0, value: 10, name: "A" },
-            I32Action { id: 1, value: 20, name: "B" },
+            NumericAction::new(10i32, "A"),
+            NumericAction::new(20i32, "B"),
         ];
-        let mut policy = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 42).unwrap();
+        
+        let id0 = actions.get(0).unwrap().id();
+        
+        let mut policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 42)
+            .unwrap();
         let ctx = DummyContext;
-        let a = I32Action { id: 0, value: 10, name: "A" };
+        let a = actions.get(0).unwrap();
 
         policy.update(&ctx, &a, &DummyReward(1.0));
         policy.update(&ctx, &a, &DummyReward(0.0));
-        assert_ne!(*policy.alpha_params.get(&0).unwrap(), 1.0);
-        assert_ne!(*policy.beta_params.get(&0).unwrap(), 1.0);
+        assert_ne!(*policy.alpha_params.get(&id0).unwrap(), 1.0);
+        assert_ne!(*policy.beta_params.get(&id0).unwrap(), 1.0);
 
         policy.reset();
         for id in policy.action_map.keys() {
@@ -255,13 +246,15 @@ mod tests {
     #[test]
     fn test_thompson_sampling_is_reproducible() {
         let actions = vec![
-            I32Action { id: 0, value: 10, name: "A" },
-            I32Action { id: 1, value: 20, name: "B" },
+            NumericAction::new(10i32, "A"),
+            NumericAction::new(20i32, "B"),
         ];
         let ctx = DummyContext;
 
-        let policy1 = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 1234).unwrap();
-        let policy2 = ThompsonSamplingPolicy::<I32Action, DummyReward, DummyContext>::new(&actions, 1234).unwrap();
+        let policy1 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 1234)
+            .unwrap();
+        let policy2 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 1234)
+            .unwrap();
 
         let chosen1 = policy1.choose_action(&ctx);
         let chosen2 = policy2.choose_action(&ctx);

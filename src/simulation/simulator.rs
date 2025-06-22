@@ -112,26 +112,8 @@ where
 mod tests {
     use super::*;
     use crate::algorithms::epsilon_greedy::EpsilonGreedyPolicy;
-    use crate::traits::entities::DummyContext;
+    use crate::traits::entities::{DummyContext, NumericAction};
     use crate::simulation::metrics::analyze_results;
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)] // Needs Eq and Hash for HashMap keys
-    struct DummyAction {
-        id: usize,
-        value: i32,
-        name: &'static str,
-    }
-
-    impl Action for DummyAction {
-        type ValueType = i32;
-        fn id(&self) -> usize {
-            self.id
-        }
-
-        fn value(&self) -> i32 {
-            self.value.clone()
-        }
-    }
-
     #[derive(Debug, Clone, PartialEq)]
     struct DummyReward {
         value: f64,
@@ -154,37 +136,25 @@ mod tests {
         name: String,
     }
 
-    impl Environment<DummyAction, DummyReward, DummyContext> for DummyEnvironment {
+    impl Environment<NumericAction<i32>, DummyReward, DummyContext> for DummyEnvironment {
         fn get_context(&self) -> DummyContext {
             DummyContext
         }
 
-        fn get_reward(&self, action: &DummyAction, context: &DummyContext) -> DummyReward {
-            let raw = action.value + 100;
+        fn get_reward(&self, action: &NumericAction<i32>, context: &DummyContext) -> DummyReward {
+            let raw = action.value() + 100;
             DummyReward::new(raw as f64)
         }
     }
     #[test]
     fn test_run_episode() {
         let actions = vec![
-            DummyAction {
-                id: 0,
-                value: 10,
-                name: "a0",
-            },
-            DummyAction {
-                id: 1,
-                value: 20,
-                name: "a1",
-            },
-            DummyAction {
-                id: 2,
-                value: 30,
-                name: "a2",
-            },
+            NumericAction::new(10, "a0"),
+            NumericAction::new(20, "a1"),
+            NumericAction::new(30, "a2"),
         ];
         let eps_greedy_policy =
-            EpsilonGreedyPolicy::<DummyAction, DummyReward, DummyContext>::new(0.2, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.2, &actions)
                 .unwrap();
         let dummy_env = DummyEnvironment {
             name: "dummy".to_string(),
@@ -199,25 +169,13 @@ mod tests {
     #[test]
     fn test_run_parallel_simulation() {
         let actions = vec![
-            DummyAction {
-                id: 0,
-                value: 10,
-                name: "a0",
-            },
-            DummyAction {
-                id: 1,
-                value: 20,
-                name: "a1",
-            },
-            DummyAction {
-                id: 2,
-                value: 30,
-                name: "a2",
-            },
+            NumericAction::new(10, "a0"),
+            NumericAction::new(20, "a1"),
+            NumericAction::new(30, "a2"),
         ];
 
         let eps_greedy_policy =
-            EpsilonGreedyPolicy::<DummyAction, DummyReward, DummyContext>::new(0.2, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.2, &actions)
                 .unwrap();
         let dummy_env = DummyEnvironment {
             name: "dummy".to_string(),

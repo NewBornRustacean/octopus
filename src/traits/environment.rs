@@ -1,5 +1,5 @@
 use crate::traits::entities::{Action, Context, Reward};
-use rayon::prelude::*;
+
 /// Defines the interface for an environment that interacts with a bandit policy.
 ///
 /// An environment provides context and generates rewards, either for simulation or real-world feedback.
