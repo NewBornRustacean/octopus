@@ -3,6 +3,8 @@ use ndarray::{Array, Array1, Dimension, Ix1};
 use std::collections::HashMap;
 use std::hash::Hash; // For 1-dimensional feature vectors
 use std::ops::{Deref, DerefMut};
+use rand::{rng, Rng};
+
 
 /// Represents an action (or arm) in a Multi-Armed Bandit problem.
 ///
@@ -13,7 +15,7 @@ pub trait Action: Clone + Eq + Hash + Send + Sync + 'static {
     type ValueType;
 
     /// Returns a unique, stable identifier for this action instance.
-    fn id(&self) -> usize;
+    fn id(&self) -> u32;
 
     /// Returns a human-readable name for this action (for logging/debugging).
     fn name(&self) -> String {
@@ -24,9 +26,51 @@ pub trait Action: Clone + Eq + Hash + Send + Sync + 'static {
     fn value(&self) -> Self::ValueType;
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct NumericAction<T>
+where
+    T: Copy + PartialEq + Eq + Hash + Send + Sync + 'static,
+{
+    id: u32,
+    value: T,
+    name: String,
+}
+
+impl<T> NumericAction<T>
+where
+    T: Copy + PartialEq + Eq + Hash + Send + Sync + 'static,
+{
+    /// Create a new NumericAction with a random ID
+    pub fn new(value: T, name:&str) -> Self {
+        let mut rng = rng();
+        let id = rng.random::<u32>();
+        Self { id, value, name: name.to_string() }
+    }
+}
+
+impl<T> Action for NumericAction<T>
+where
+    T: Copy + Eq + Hash + Send + Sync + 'static,
+{
+    type ValueType = T;
+
+    fn id(&self) -> u32 {
+        self.id
+    }
+
+    fn value(&self) -> T {
+        self.value
+    }
+
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+
 /// Stores a collection of actions, indexed by their unique ID.
 #[derive(Debug, Clone)]
-pub struct ActionStorage<A: Action>(HashMap<usize, A>);
+pub struct ActionStorage<A: Action>(HashMap<u32, A>);
 
 impl<A: Action + Clone> ActionStorage<A> {
     /// Creates a new ActionStorage from a slice of actions.
@@ -44,7 +88,7 @@ impl<A: Action + Clone> ActionStorage<A> {
 }
 
 impl<A: Action> Deref for ActionStorage<A> {
-    type Target = HashMap<usize, A>;
+    type Target = HashMap<u32, A>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

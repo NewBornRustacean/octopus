@@ -7,7 +7,6 @@ use std::sync::Mutex;
 use crate::traits::entities::{Action, ActionStorage, Context, Reward};
 use crate::traits::policy::BanditPolicy;
 use crate::utils::error::OctopusError;
-use ndarray::Dimension;
 use rand::{Rng, SeedableRng};
 
 /// Epsilon-Greedy policy for Multi-Armed Bandit problems.
@@ -24,8 +23,8 @@ where
     R: Reward,
 {
     epsilon: f64,
-    counts: HashMap<usize, u64>,
-    sum_rewards: HashMap<usize, f64>,
+    counts: HashMap<u32, u64>,
+    sum_rewards: HashMap<u32, f64>,
     action_map: ActionStorage<A>,
     total_pulls: u64,
     rng: Mutex<StdRng>,
@@ -52,9 +51,9 @@ where
                 expected_range: "0.0 to 1.0 inclusive".to_string(),
             });
         }
-        let counts: HashMap<usize, u64> =
+        let counts: HashMap<u32, u64> =
             initial_actions.iter().map(|action| (action.id(), 0)).collect();
-        let sum_rewards: HashMap<usize, f64> =
+        let sum_rewards: HashMap<u32, f64> =
             initial_actions.iter().map(|action| (action.id(), 0.0)).collect();
         Ok(EpsilonGreedyPolicy {
             epsilon,
@@ -69,7 +68,7 @@ where
 
     /// Returns the average reward for the given action ID.
     /// Returns 0.0 if the action has not been selected yet.
-    fn get_average_reward(&self, action_id: usize) -> f64 {
+    fn get_average_reward(&self, action_id: u32) -> f64 {
         let count = *self.counts.get(&action_id).unwrap_or(&0);
         let sum_reward = *self.sum_rewards.get(&action_id).unwrap_or(&0.0);
         if count == 0 {
@@ -115,12 +114,12 @@ where
         let random_float: f64 = rng.random_range(0.0..1.0);
         if random_float < self.epsilon {
             // Explore: random action
-            let action_ids: Vec<&usize> = self.action_map.keys().collect();
+            let action_ids: Vec<&u32> = self.action_map.keys().collect();
             let rand_id = action_ids.choose(&mut rng).unwrap();
             self.action_map.get(rand_id).unwrap().clone()
         } else {
             // Exploit: action with highest average reward
-            let mut best_action_id: usize = *self.action_map.keys().next().unwrap();
+            let mut best_action_id: u32 = *self.action_map.keys().next().unwrap();
             let mut max_avg_reward: f64 = self.get_average_reward(best_action_id);
             for &action_id in self.action_map.keys() {
                 let current_avg = self.get_average_reward(action_id);
@@ -155,28 +154,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::entities::{Action, DummyContext};
-    use ndarray::Ix1;
-    use std::hash::Hash;
+    use crate::traits::entities::{Action, DummyContext, NumericAction};
 
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)] // Needs Eq and Hash for HashMap keys
-    struct I32Action {
-        id: usize,
-        value: i32,
-        name: &'static str,
-    }
-
-    impl Action for I32Action {
-        type ValueType = i32;
-        fn id(&self) -> usize {
-            self.id
-        }
-
-        fn value(&self) -> i32 {
-            self.value.clone()
-        }
-    }
-
+    
     #[derive(Debug, Clone, PartialEq)]
     struct DummyReward(f64);
 
@@ -189,24 +169,12 @@ mod tests {
     #[test]
     fn test_epsilon_greedy_init_success() {
         let actions = vec![
-            I32Action {
-                id: 0,
-                value: 0,
-                name: "Action A",
-            },
-            I32Action {
-                id: 1,
-                value: 10,
-                name: "Action B",
-            },
-            I32Action {
-                id: 2,
-                value: 20,
-                name: "Action C",
-            },
+            NumericAction::new(0i32, "Action A"),
+            NumericAction::new(10i32, "Action B"),
+            NumericAction::new(20i32, "Action C"),
         ];
         let policy =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(0.1, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.1, &actions)
                 .unwrap();
 
         assert_eq!(policy.epsilon, 0.1);
@@ -221,14 +189,10 @@ mod tests {
 
     #[test]
     fn test_epsilon_greedy_init_invalid_epsilon() {
-        let actions = vec![I32Action {
-            id: 0,
-            value: 0,
-            name: "Action A",
-        }];
+        let actions = vec![NumericAction::new(0i32, "Action A")];
 
         let error_high =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(1.5, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(1.5, &actions)
                 .unwrap_err();
         assert_eq!(
             error_high,
@@ -240,7 +204,7 @@ mod tests {
         );
 
         let error_low =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(-0.1, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(-0.1, &actions)
                 .unwrap_err();
         assert_eq!(
             error_low,
@@ -255,32 +219,16 @@ mod tests {
     #[test]
     fn test_epsilon_greedy_update_and_average() {
         let actions = vec![
-            I32Action {
-                id: 0,
-                value: 0,
-                name: "Action A",
-            },
-            I32Action {
-                id: 1,
-                value: 10,
-                name: "Action B",
-            },
+            NumericAction::new(0i32, "Action A"),
+            NumericAction::new(10i32, "Action B"),
         ];
         let mut policy =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(0.0, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.0, &actions)
                 .unwrap();
         let dummy_context = DummyContext;
 
-        let action_a = I32Action {
-            id: 0,
-            value: 10,
-            name: "Action A",
-        };
-        let action_b = I32Action {
-            id: 1,
-            value: 20,
-            name: "Action B",
-        };
+        let action_a = NumericAction::new(10i32, "Action A"); 
+        let action_b = NumericAction::new(20i32, "Action B"); 
 
         // Update Action A
         policy.update(&dummy_context, &action_a, &DummyReward(10.0));
@@ -305,81 +253,52 @@ mod tests {
     #[test]
     fn test_epsilon_greedy_exploitation() {
         let actions = vec![
-            I32Action {
-                id: 0,
-                value: 10,
-                name: "Bad Action",
-            },
-            I32Action {
-                id: 1,
-                value: 20,
-                name: "Good Action",
-            },
-            I32Action {
-                id: 2,
-                value: 30,
-                name: "Mediocre Action",
-            },
+            NumericAction::new(10i32, "Bad Action"),
+            NumericAction::new(20i32, "Mediocre Action"),
+            NumericAction::new(30i32, "Good Action"),
         ];
         // Epsilon = 0.0 means always exploit
         let mut policy =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(0.0, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.0, &actions)
                 .unwrap();
         let dummy_context = DummyContext;
 
         // Simulate some pulls to establish average rewards
         policy.update(
             &dummy_context,
-            &I32Action {
-                id: 0,
-                value: 10,
-                name: "Bad Action",
-            },
+            actions.get(0).unwrap(),
             &DummyReward(1.0),
         ); // Avg: 1.0
         policy.update(
             &dummy_context,
-            &I32Action {
-                id: 1,
-                value: 20,
-                name: "Good Action",
-            },
+            actions.get(1).unwrap(),
             &DummyReward(10.0),
         ); // Avg: 10.0
         policy.update(
             &dummy_context,
-            &I32Action {
-                id: 1,
-                value: 10,
-                name: "Good Action",
-            },
+            actions.get(2).unwrap(),
             &DummyReward(12.0),
-        ); // Avg: 11.0
+        ); // Avg: 12.0
         policy.update(
             &dummy_context,
-            &I32Action {
-                id: 2,
-                value: 10,
-                name: "Mediocre Action",
-            },
+            actions.get(0).unwrap(),
             &DummyReward(5.0),
-        ); // Avg: 5.0
+        ); // Avg: 3.0
+        
+        let reward0 = policy.get_average_reward(actions.get(0).unwrap().id());
+        let reward1 = policy.get_average_reward(actions.get(1).unwrap().id());
+        let reward2 = policy.get_average_reward(actions.get(2).unwrap().id());
+        // The "Good Action" should have the highest average reward
+        assert_eq!(reward0, 3.0);
+        assert_eq!(reward1, 10.0);
+        assert_eq!(reward2, 12.0);
 
-        // The "Good Action" (id 1) should have the highest average reward
-        assert_eq!(policy.get_average_reward(0), 1.0);
-        assert_eq!(policy.get_average_reward(1), 11.0);
-        assert_eq!(policy.get_average_reward(2), 5.0);
-
-        // Policy should consistently choose the "Good Action"
+        // Policy should consistently choose the "Good Action", since epsilon is zero.
         for _ in 0..100 {
             let chosen_action = policy.choose_action(&dummy_context);
             assert_eq!(
-                chosen_action,
-                I32Action {
-                    id: 1,
-                    value: 20,
-                    name: "Good Action"
-                }
+                chosen_action.name(),
+                "Good Action"
             );
         }
     }
@@ -387,26 +306,20 @@ mod tests {
     #[test]
     fn test_epsilon_greedy_exploration() {
         let actions = vec![
-            I32Action {
-                id: 0,
-                value: 10,
-                name: "Action A",
-            },
-            I32Action {
-                id: 1,
-                value: 10,
-                name: "Action B",
-            },
+            NumericAction::new(10i32, "Action A"),
+            NumericAction::new(10i32, "Action B"),
         ];
+        let id0 = actions.get(0).unwrap().id();
+        let id1 = actions.get(1).unwrap().id();
         // Epsilon = 1.0 means always explore (random choice)
         let policy =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(1.0, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(1.0, &actions)
                 .unwrap();
         let dummy_context = DummyContext;
 
-        let mut counts_chosen: HashMap<usize, u64> = HashMap::new();
-        counts_chosen.insert(0, 0);
-        counts_chosen.insert(1, 0);
+        let mut counts_chosen: HashMap<u32, u64> = HashMap::new();
+        counts_chosen.insert(id0.clone(), 0);
+        counts_chosen.insert(id1.clone(), 0);
 
         // Perform many choices and check if both actions are chosen roughly equally
         let num_trials = 1000;
@@ -414,9 +327,9 @@ mod tests {
             let chosen = policy.choose_action(&dummy_context);
             *counts_chosen.get_mut(&chosen.id()).unwrap() += 1;
         }
-
-        let chosen_a = *counts_chosen.get(&0).unwrap();
-        let chosen_b = *counts_chosen.get(&1).unwrap();
+        println!("Counts: {:?}", policy.counts);
+        let chosen_a = *counts_chosen.get(&id0).unwrap();
+        let chosen_b = *counts_chosen.get(&id1).unwrap();
 
         // Check if counts are reasonably close to 50/50 for random exploration
         let expected_per_action = num_trials as f64 / actions.len() as f64;
@@ -438,47 +351,35 @@ mod tests {
     #[test]
     fn test_epsilon_greedy_reset() {
         let actions = vec![
-            I32Action {
-                id: 0,
-                value: 10,
-                name: "Action A",
-            },
-            I32Action {
-                id: 1,
-                value: 10,
-                name: "Action B",
-            },
+            NumericAction::new(10i32, "Action A"),
+            NumericAction::new(10i32, "Action B"),
         ];
+        
+        let id0 = actions.get(0).unwrap().id();
+        let id1 = actions.get(1).unwrap().id();
+        
         let mut policy =
-            EpsilonGreedyPolicy::<I32Action, DummyReward, DummyContext>::new(1.0, &actions)
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(1.0, &actions)
                 .unwrap();
 
         let dummy_context = DummyContext;
 
         policy.update(
             &dummy_context,
-            &I32Action {
-                id: 0,
-                value: 10,
-                name: "Action A",
-            },
+            &actions.get(0).unwrap(),
             &DummyReward(10.0),
         );
         policy.update(
             &dummy_context,
-            &I32Action {
-                id: 1,
-                value: 10,
-                name: "Action B",
-            },
+            &actions.get(1).unwrap(),
             &DummyReward(20.0),
         );
 
         assert_eq!(policy.total_pulls, 2);
-        assert_eq!(*policy.counts.get(&0).unwrap(), 1);
-        assert_eq!(*policy.counts.get(&1).unwrap(), 1);
-        assert_eq!(*policy.sum_rewards.get(&0).unwrap(), 10.0);
-        assert_eq!(*policy.sum_rewards.get(&1).unwrap(), 20.0);
+        assert_eq!(*policy.counts.get(&id0).unwrap(), 1);
+        assert_eq!(*policy.counts.get(&id1).unwrap(), 1);
+        assert_eq!(*policy.sum_rewards.get(&id0).unwrap(), 10.0);
+        assert_eq!(*policy.sum_rewards.get(&id1).unwrap(), 20.0);
 
         policy.reset();
         assert_eq!(policy.total_pulls, 0);
