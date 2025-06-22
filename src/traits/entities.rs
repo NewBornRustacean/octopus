@@ -1,10 +1,9 @@
 use crate::utils::error::OctopusError;
 use ndarray::{Array, Array1, Dimension, Ix1};
+use rand::{Rng, rng};
 use std::collections::HashMap;
 use std::hash::Hash; // For 1-dimensional feature vectors
 use std::ops::{Deref, DerefMut};
-use rand::{rng, Rng};
-
 
 /// Represents an action (or arm) in a Multi-Armed Bandit problem.
 ///
@@ -41,10 +40,24 @@ where
     T: Copy + PartialEq + Eq + Hash + Send + Sync + 'static,
 {
     /// Create a new NumericAction with a random ID
-    pub fn new(value: T, name:&str) -> Self {
+    pub fn new(value: T, name: &str) -> Self {
         let mut rng = rng();
         let id = rng.random::<u32>();
-        Self { id, value, name: name.to_string() }
+        Self {
+            id,
+            value,
+            name: name.to_string(),
+        }
+    }
+
+    /// Create a new NumericAction with a given ID
+    /// This is for test cases.
+    pub fn with_id(id: u32, value: T, name: &str) -> Self {
+        Self {
+            id,
+            value,
+            name: name.to_string(),
+        }
     }
 }
 
@@ -66,7 +79,6 @@ where
         self.name.clone()
     }
 }
-
 
 /// Stores a collection of actions, indexed by their unique ID.
 #[derive(Debug, Clone)]

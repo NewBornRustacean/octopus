@@ -83,7 +83,6 @@ where
     }
 }
 
-
 pub fn run_parallel_simulations<P, A, R, C, E>(
     policy: P,
     environment: E,
@@ -107,13 +106,12 @@ where
         .collect()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::algorithms::epsilon_greedy::EpsilonGreedyPolicy;
-    use crate::traits::entities::{DummyContext, NumericAction};
     use crate::simulation::metrics::analyze_results;
+    use crate::traits::entities::{DummyContext, NumericAction};
     #[derive(Debug, Clone, PartialEq)]
     struct DummyReward {
         value: f64,
@@ -154,8 +152,10 @@ mod tests {
             NumericAction::new(30, "a2"),
         ];
         let eps_greedy_policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.2, &actions)
-                .unwrap();
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                0.2, &actions,
+            )
+            .unwrap();
         let dummy_env = DummyEnvironment {
             name: "dummy".to_string(),
         };
@@ -165,7 +165,7 @@ mod tests {
         let result = simulator.run_episode(10, &actions);
         println!("{:?}", result);
     }
-    
+
     #[test]
     fn test_run_parallel_simulation() {
         let actions = vec![
@@ -175,28 +175,23 @@ mod tests {
         ];
 
         let eps_greedy_policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.2, &actions)
-                .unwrap();
+            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                0.2, &actions,
+            )
+            .unwrap();
         let dummy_env = DummyEnvironment {
             name: "dummy".to_string(),
         };
-        
-        
+
         // simulate with 100 different simulators and 1000 steps for each.
-        let results = run_parallel_simulations(
-            eps_greedy_policy,
-            dummy_env,
-            &actions,
-            1000,
-            100,
-        );
-        
+        let results = run_parallel_simulations(eps_greedy_policy, dummy_env, &actions, 1000, 100);
+
         let stats = analyze_results(&results);
         println!("Average reward: {:.3}", stats.average_cumulative_reward);
         println!("Average regret: {:.3}", stats.average_cumulative_regret);
-        println!("Final regret mean ± std: {:.3} ± {:.3}",
-                 stats.mean_final_simple_regret,
-                 stats.std_final_simple_regret);
-
+        println!(
+            "Final regret mean ± std: {:.3} ± {:.3}",
+            stats.mean_final_simple_regret, stats.std_final_simple_regret
+        );
     }
 }

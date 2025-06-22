@@ -1,13 +1,22 @@
 [package]
 name = "octopus"
 version = "0.1.0"
+authors = ["NewBornRustacean <huiseomkim.gmail.com>"]
+description = "A fast, flexible framework for multi-armed bandit strategies in Rust."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/NewBornRustacean/octopus"
+homepage = "https://github.com/NewBornRustacean/octopus"
+documentation = "https://docs.rs/octopus"
+keywords = ["bandit", "MAB", "thompson-sampling", "epsilon-greedy", "machine-learning"]
+categories = ["algorithms", "science", "simulation", "data-structures",]
 edition = "2024"
+rust-version = "1.85.0"  # use minimum supported rust version for edition 2024
+exclude = [".github", "target", "examples", "docs"]
+
 
 [dependencies]
-dashmap = "6.1.0"
 ndarray = "0.16.1"
-num-traits = "0.2.19"
-parking_lot = "0.12.4"
 rand = "0.9.1"
 rand_distr = "0.5.1"
 rayon = "1.10.0"

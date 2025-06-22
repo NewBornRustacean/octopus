@@ -93,17 +93,24 @@ where
         let mut rng = self.rng.lock().unwrap();
         let mut best_action_id = *self.action_map.keys().next().unwrap();
         let mut max_sampled_reward = -1.0;
+        
+        // sort action_ids to ensure deterministic output when the seeds are equal
+        let mut action_ids: Vec<_> = self.action_map.keys().copied().collect();
+        action_ids.sort_unstable();
 
-        for &action_id in self.action_map.keys() {
+        for action_id in action_ids {
             let alpha = *self.alpha_params.get(&action_id).unwrap_or(&1.0);
             let beta = *self.beta_params.get(&action_id).unwrap_or(&1.0);
 
             if alpha <= 0.0 || beta <= 0.0 {
-                panic!("Invalid Beta parameters: alpha = {}, beta = {}", alpha, beta);
+                panic!(
+                    "Invalid Beta parameters: alpha = {}, beta = {}",
+                    alpha, beta
+                );
             }
 
-            let beta_dist = Beta::new(alpha, beta)
-                .expect("Beta distribution parameters must be positive.");
+            let beta_dist =
+                Beta::new(alpha, beta).expect("Beta distribution parameters must be positive.");
             let sampled_reward = beta_dist.sample(&mut *rng);
 
             if sampled_reward > max_sampled_reward {
@@ -155,8 +162,10 @@ mod tests {
             NumericAction::new(10i32, "A"),
             NumericAction::new(20i32, "B"),
         ];
-        let policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 42)
-            .unwrap();
+        let policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            &actions, 42,
+        )
+        .unwrap();
         assert_eq!(policy.alpha_params.len(), 2);
         assert_eq!(policy.beta_params.len(), 2);
         for a in actions {
@@ -168,7 +177,10 @@ mod tests {
     #[test]
     fn test_thompson_init_empty_error() {
         let actions: Vec<NumericAction<i32>> = vec![];
-        let err = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 42).unwrap_err();
+        let err = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            &actions, 42,
+        )
+        .unwrap_err();
         assert_eq!(
             err,
             OctopusError::InvalidParameter {
@@ -185,8 +197,10 @@ mod tests {
             NumericAction::new(10i32, "A"),
             NumericAction::new(20i32, "B"),
         ];
-        let policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 12345)
-            .unwrap();
+        let policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            &actions, 12345,
+        )
+        .unwrap();
         let ctx = DummyContext;
         let action = policy.choose_action(&ctx);
         assert!(actions.contains(&action));
@@ -199,12 +213,15 @@ mod tests {
             NumericAction::new(20i32, "B"),
         ];
         let id0 = actions.get(0).unwrap().id();
-        
-        let mut policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 777)
+
+        let mut policy =
+            ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                &actions, 777,
+            )
             .unwrap();
         let ctx = DummyContext;
 
-        let a = actions.get(0).unwrap(); 
+        let a = actions.get(0).unwrap();
 
         // Simulate a reward of 1.0 (success)
         policy.update(&ctx, a, &DummyReward(1.0));
@@ -223,10 +240,13 @@ mod tests {
             NumericAction::new(10i32, "A"),
             NumericAction::new(20i32, "B"),
         ];
-        
+
         let id0 = actions.get(0).unwrap().id();
-        
-        let mut policy = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 42)
+
+        let mut policy =
+            ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                &actions, 42,
+            )
             .unwrap();
         let ctx = DummyContext;
         let a = actions.get(0).unwrap();
@@ -246,19 +266,24 @@ mod tests {
     #[test]
     fn test_thompson_sampling_is_reproducible() {
         let actions = vec![
-            NumericAction::new(10i32, "A"),
-            NumericAction::new(20i32, "B"),
+            NumericAction::with_id(0, 10i32, "A"),
+            NumericAction::with_id(1, 20i32, "B"),
         ];
+
         let ctx = DummyContext;
+        
+        for seed in (1000..1500) {
+            let policy1 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                &actions, seed,
+            ).unwrap();
+            let policy2 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                &actions, seed,
+            ).unwrap();
 
-        let policy1 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 1234)
-            .unwrap();
-        let policy2 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 1234)
-            .unwrap();
+            let chosen1 = policy1.choose_action(&ctx);
+            let chosen2 = policy2.choose_action(&ctx);
 
-        let chosen1 = policy1.choose_action(&ctx);
-        let chosen2 = policy2.choose_action(&ctx);
-
-        assert_eq!(chosen1, chosen2, "Same seed should produce same result");
+            assert_eq!(chosen1, chosen2, "Same seed should produce same result: {:?}", seed);
+        }
     }
 }
