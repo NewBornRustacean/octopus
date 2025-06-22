@@ -78,9 +78,12 @@ pub fn analyze_results(results: &[SimulationResults]) -> SummaryStats {
     }
 
     let mean_final_simple_regret = final_simple_regrets.iter().sum::<f64>() / num_episodes as f64;
-    let std_final_simple_regret = (final_simple_regrets.iter()
-                                                       .map(|r| (r - mean_final_simple_regret).powi(2))
-                                                       .sum::<f64>() / num_episodes as f64).sqrt();
+    let std_final_simple_regret = (final_simple_regrets
+        .iter()
+        .map(|r| (r - mean_final_simple_regret).powi(2))
+        .sum::<f64>()
+        / num_episodes as f64)
+        .sqrt();
 
     SummaryStats {
         average_cumulative_reward,

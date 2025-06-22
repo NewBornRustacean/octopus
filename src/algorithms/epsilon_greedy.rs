@@ -99,7 +99,6 @@ where
     }
 }
 
-
 impl<A, R, C> BanditPolicy<A, R, C> for EpsilonGreedyPolicy<A, R, C>
 where
     C: Context,
@@ -156,7 +155,6 @@ mod tests {
     use super::*;
     use crate::traits::entities::{Action, DummyContext, NumericAction};
 
-    
     #[derive(Debug, Clone, PartialEq)]
     struct DummyReward(f64);
 
@@ -173,9 +171,10 @@ mod tests {
             NumericAction::new(10i32, "Action B"),
             NumericAction::new(20i32, "Action C"),
         ];
-        let policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.1, &actions)
-                .unwrap();
+        let policy = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            0.1, &actions,
+        )
+        .unwrap();
 
         assert_eq!(policy.epsilon, 0.1);
         assert_eq!(policy.action_map.len(), 3);
@@ -191,9 +190,10 @@ mod tests {
     fn test_epsilon_greedy_init_invalid_epsilon() {
         let actions = vec![NumericAction::new(0i32, "Action A")];
 
-        let error_high =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(1.5, &actions)
-                .unwrap_err();
+        let error_high = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            1.5, &actions,
+        )
+        .unwrap_err();
         assert_eq!(
             error_high,
             OctopusError::InvalidParameter {
@@ -203,9 +203,10 @@ mod tests {
             }
         );
 
-        let error_low =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(-0.1, &actions)
-                .unwrap_err();
+        let error_low = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            -0.1, &actions,
+        )
+        .unwrap_err();
         assert_eq!(
             error_low,
             OctopusError::InvalidParameter {
@@ -222,13 +223,14 @@ mod tests {
             NumericAction::new(0i32, "Action A"),
             NumericAction::new(10i32, "Action B"),
         ];
-        let mut policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.0, &actions)
-                .unwrap();
+        let mut policy = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            0.0, &actions,
+        )
+        .unwrap();
         let dummy_context = DummyContext;
 
-        let action_a = NumericAction::new(10i32, "Action A"); 
-        let action_b = NumericAction::new(20i32, "Action B"); 
+        let action_a = NumericAction::new(10i32, "Action A");
+        let action_b = NumericAction::new(20i32, "Action B");
 
         // Update Action A
         policy.update(&dummy_context, &action_a, &DummyReward(10.0));
@@ -258,33 +260,18 @@ mod tests {
             NumericAction::new(30i32, "Good Action"),
         ];
         // Epsilon = 0.0 means always exploit
-        let mut policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(0.0, &actions)
-                .unwrap();
+        let mut policy = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            0.0, &actions,
+        )
+        .unwrap();
         let dummy_context = DummyContext;
 
         // Simulate some pulls to establish average rewards
-        policy.update(
-            &dummy_context,
-            actions.get(0).unwrap(),
-            &DummyReward(1.0),
-        ); // Avg: 1.0
-        policy.update(
-            &dummy_context,
-            actions.get(1).unwrap(),
-            &DummyReward(10.0),
-        ); // Avg: 10.0
-        policy.update(
-            &dummy_context,
-            actions.get(2).unwrap(),
-            &DummyReward(12.0),
-        ); // Avg: 12.0
-        policy.update(
-            &dummy_context,
-            actions.get(0).unwrap(),
-            &DummyReward(5.0),
-        ); // Avg: 3.0
-        
+        policy.update(&dummy_context, actions.get(0).unwrap(), &DummyReward(1.0)); // Avg: 1.0
+        policy.update(&dummy_context, actions.get(1).unwrap(), &DummyReward(10.0)); // Avg: 10.0
+        policy.update(&dummy_context, actions.get(2).unwrap(), &DummyReward(12.0)); // Avg: 12.0
+        policy.update(&dummy_context, actions.get(0).unwrap(), &DummyReward(5.0)); // Avg: 3.0
+
         let reward0 = policy.get_average_reward(actions.get(0).unwrap().id());
         let reward1 = policy.get_average_reward(actions.get(1).unwrap().id());
         let reward2 = policy.get_average_reward(actions.get(2).unwrap().id());
@@ -296,10 +283,7 @@ mod tests {
         // Policy should consistently choose the "Good Action", since epsilon is zero.
         for _ in 0..100 {
             let chosen_action = policy.choose_action(&dummy_context);
-            assert_eq!(
-                chosen_action.name(),
-                "Good Action"
-            );
+            assert_eq!(chosen_action.name(), "Good Action");
         }
     }
 
@@ -312,9 +296,10 @@ mod tests {
         let id0 = actions.get(0).unwrap().id();
         let id1 = actions.get(1).unwrap().id();
         // Epsilon = 1.0 means always explore (random choice)
-        let policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(1.0, &actions)
-                .unwrap();
+        let policy = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            1.0, &actions,
+        )
+        .unwrap();
         let dummy_context = DummyContext;
 
         let mut counts_chosen: HashMap<u32, u64> = HashMap::new();
@@ -354,26 +339,19 @@ mod tests {
             NumericAction::new(10i32, "Action A"),
             NumericAction::new(10i32, "Action B"),
         ];
-        
+
         let id0 = actions.get(0).unwrap().id();
         let id1 = actions.get(1).unwrap().id();
-        
-        let mut policy =
-            EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(1.0, &actions)
-                .unwrap();
+
+        let mut policy = EpsilonGreedyPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+            1.0, &actions,
+        )
+        .unwrap();
 
         let dummy_context = DummyContext;
 
-        policy.update(
-            &dummy_context,
-            &actions.get(0).unwrap(),
-            &DummyReward(10.0),
-        );
-        policy.update(
-            &dummy_context,
-            &actions.get(1).unwrap(),
-            &DummyReward(20.0),
-        );
+        policy.update(&dummy_context, &actions.get(0).unwrap(), &DummyReward(10.0));
+        policy.update(&dummy_context, &actions.get(1).unwrap(), &DummyReward(20.0));
 
         assert_eq!(policy.total_pulls, 2);
         assert_eq!(*policy.counts.get(&id0).unwrap(), 1);
