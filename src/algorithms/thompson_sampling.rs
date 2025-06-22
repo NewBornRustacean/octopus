@@ -93,8 +93,12 @@ where
         let mut rng = self.rng.lock().unwrap();
         let mut best_action_id = *self.action_map.keys().next().unwrap();
         let mut max_sampled_reward = -1.0;
+        
+        // sort action_ids to ensure deterministic output when the seeds are equal
+        let mut action_ids: Vec<_> = self.action_map.keys().copied().collect();
+        action_ids.sort_unstable();
 
-        for &action_id in self.action_map.keys() {
+        for action_id in action_ids {
             let alpha = *self.alpha_params.get(&action_id).unwrap_or(&1.0);
             let beta = *self.beta_params.get(&action_id).unwrap_or(&1.0);
 
@@ -267,19 +271,19 @@ mod tests {
         ];
 
         let ctx = DummyContext;
+        
+        for seed in (1000..1500) {
+            let policy1 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                &actions, seed,
+            ).unwrap();
+            let policy2 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
+                &actions, seed,
+            ).unwrap();
 
-        let policy1 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
-            &actions, 1234,
-        )
-        .unwrap();
-        let policy2 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(
-            &actions, 1234,
-        )
-        .unwrap();
+            let chosen1 = policy1.choose_action(&ctx);
+            let chosen2 = policy2.choose_action(&ctx);
 
-        let chosen1 = policy1.choose_action(&ctx);
-        let chosen2 = policy2.choose_action(&ctx);
-
-        assert_eq!(chosen1, chosen2, "Same seed should produce same result");
+            assert_eq!(chosen1, chosen2, "Same seed should produce same result: {:?}", seed);
+        }
     }
 }

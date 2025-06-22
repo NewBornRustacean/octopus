@@ -303,8 +303,8 @@ mod tests {
         let dummy_context = DummyContext;
 
         let mut counts_chosen: HashMap<u32, u64> = HashMap::new();
-        counts_chosen.insert(id0.clone(), 0);
-        counts_chosen.insert(id1.clone(), 0);
+        counts_chosen.insert(id0, 0);
+        counts_chosen.insert(id1, 0);
 
         // Perform many choices and check if both actions are chosen roughly equally
         let num_trials = 1000;
