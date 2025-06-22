@@ -3,7 +3,7 @@ use rayon::prelude::*;
 /// Defines the interface for an environment that interacts with a bandit policy.
 ///
 /// An environment provides context and generates rewards, either for simulation or real-world feedback.
-pub trait Environment<A, R, C>: Send + Sync + 'static
+pub trait Environment<A, R, C>: Clone + Send + Sync + 'static
 where
     A: Action,
     R: Reward,
@@ -20,7 +20,7 @@ where
     /// Used for regret calculation in simulation.
     fn get_optimal_reward(&self, context: &C, actions: &[A]) -> R {
         actions
-            .par_iter()
+            .iter()
             .map(|a| self.get_reward(a, context))
             .max_by(|r1, r2| r1.value().partial_cmp(&r2.value()).unwrap())
             .expect("No actions provided")
