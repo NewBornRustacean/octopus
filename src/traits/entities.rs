@@ -46,6 +46,12 @@ where
         let id = rng.random::<u32>();
         Self { id, value, name: name.to_string() }
     }
+    
+    /// Create a new NumericAction with a given ID
+    /// This is for test cases. 
+    pub fn with_id(id:u32, value: T, name: &str) -> Self {
+        Self { id, value, name: name.to_string() }
+    }
 }
 
 impl<T> Action for NumericAction<T>

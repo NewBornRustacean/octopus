@@ -246,9 +246,10 @@ mod tests {
     #[test]
     fn test_thompson_sampling_is_reproducible() {
         let actions = vec![
-            NumericAction::new(10i32, "A"),
-            NumericAction::new(20i32, "B"),
+            NumericAction::with_id(0, 10i32, "A"),
+            NumericAction::with_id(1, 20i32, "B"),
         ];
+
         let ctx = DummyContext;
 
         let policy1 = ThompsonSamplingPolicy::<NumericAction<i32>, DummyReward, DummyContext>::new(&actions, 1234)
