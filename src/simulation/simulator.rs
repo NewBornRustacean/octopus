@@ -3,7 +3,8 @@ use crate::traits::entities::{Action, Context, Reward};
 use crate::traits::environment::Environment;
 use crate::traits::policy::BanditPolicy;
 
-use ndarray::Dimension;
+use rayon::prelude::*;
+
 use std::marker::PhantomData;
 
 /// Simulator for running Multi-Armed Bandit experiments.
@@ -42,13 +43,13 @@ where
         }
     }
 
-    /// Runs a simulation episode for a given number of steps.
+    /// Runs a simulation episode for a given number of steps..clone()
     ///
     /// * `num_steps` - Number of time steps to simulate.
     /// * `all_actions` - Slice of all possible actions (for regret calculation).
     ///
     /// Returns a SimulationResults object with cumulative rewards and regret.
-    pub fn run(&mut self, num_steps: usize, all_actions: &[A]) -> SimulationResults {
+    pub fn run_episode(&mut self, num_steps: usize, all_actions: &[A]) -> SimulationResults {
         let mut cumulative_reward: f64 = 0.0;
         let mut cumulative_optimal_reward: f64 = 0.0;
         let mut steps_rewards: Vec<f64> = Vec::with_capacity(num_steps);
@@ -82,13 +83,37 @@ where
     }
 }
 
+
+pub fn run_parallel_simulations<P, A, R, C, E>(
+    policy: P,
+    environment: E,
+    all_actions: &[A],
+    num_steps: usize,
+    num_runs: usize,
+) -> Vec<SimulationResults>
+where
+    P: BanditPolicy<A, R, C> + Clone + Send + Sync + 'static,
+    E: Environment<A, R, C> + Clone + Send + Sync + 'static,
+    A: Action + Clone + Send + Sync + 'static,
+    R: Reward + Send + Sync + 'static,
+    C: Context + Send + Sync + 'static,
+{
+    (0..num_runs)
+        .into_par_iter()
+        .map(|_| {
+            let mut sim = Simulator::new(policy.clone(), environment.clone());
+            sim.run_episode(num_steps, all_actions)
+        })
+        .collect()
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::algorithms::epsilon_greedy::EpsilonGreedyPolicy;
     use crate::traits::entities::DummyContext;
-    use ndarray::Array1;
-
+    use crate::simulation::metrics::analyze_results;
     #[derive(Debug, Clone, PartialEq, Eq, Hash)] // Needs Eq and Hash for HashMap keys
     struct DummyAction {
         id: usize,
@@ -140,7 +165,7 @@ mod tests {
         }
     }
     #[test]
-    fn test_run_simulation() {
+    fn test_run_episode() {
         let actions = vec![
             DummyAction {
                 id: 0,
@@ -167,7 +192,53 @@ mod tests {
 
         let mut simulator = Simulator::new(eps_greedy_policy, dummy_env);
 
-        let result = simulator.run(10, &actions);
+        let result = simulator.run_episode(10, &actions);
         println!("{:?}", result);
+    }
+    
+    #[test]
+    fn test_run_parallel_simulation() {
+        let actions = vec![
+            DummyAction {
+                id: 0,
+                value: 10,
+                name: "a0",
+            },
+            DummyAction {
+                id: 1,
+                value: 20,
+                name: "a1",
+            },
+            DummyAction {
+                id: 2,
+                value: 30,
+                name: "a2",
+            },
+        ];
+
+        let eps_greedy_policy =
+            EpsilonGreedyPolicy::<DummyAction, DummyReward, DummyContext>::new(0.2, &actions)
+                .unwrap();
+        let dummy_env = DummyEnvironment {
+            name: "dummy".to_string(),
+        };
+        
+        
+        // simulate with 100 different simulators and 1000 steps for each.
+        let results = run_parallel_simulations(
+            eps_greedy_policy,
+            dummy_env,
+            &actions,
+            1000,
+            100,
+        );
+        
+        let stats = analyze_results(&results);
+        println!("Average reward: {:.3}", stats.average_cumulative_reward);
+        println!("Average regret: {:.3}", stats.average_cumulative_regret);
+        println!("Final regret mean ± std: {:.3} ± {:.3}",
+                 stats.mean_final_simple_regret,
+                 stats.std_final_simple_regret);
+
     }
 }

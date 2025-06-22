@@ -4,7 +4,7 @@ use crate::traits::entities::{Action, Context, Reward};
 ///
 /// Implementors define how to select actions, update internal state, and reset for new experiments.
 /// Generic over action, reward, and context types.
-pub trait BanditPolicy<A, R, C>: Send + Sync + 'static
+pub trait BanditPolicy<A, R, C>: Clone + Send + Sync + 'static
 where
     A: Action,
     R: Reward,

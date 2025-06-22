@@ -80,11 +80,33 @@ where
     }
 }
 
+impl<A, R, C> Clone for EpsilonGreedyPolicy<A, R, C>
+where
+    C: Context,
+    A: Action,
+    R: Reward,
+    A: Clone,
+{
+    fn clone(&self) -> Self {
+        EpsilonGreedyPolicy {
+            epsilon: self.epsilon,
+            counts: self.counts.clone(),
+            sum_rewards: self.sum_rewards.clone(),
+            action_map: self.action_map.clone(),
+            total_pulls: self.total_pulls,
+            rng: Mutex::new(StdRng::seed_from_u64((self.epsilon * 10.0) as u64)),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+
 impl<A, R, C> BanditPolicy<A, R, C> for EpsilonGreedyPolicy<A, R, C>
 where
     C: Context,
     A: Action + 'static,
     R: Reward,
+    EpsilonGreedyPolicy<A, R, C>: Clone,
 {
     /// Selects an action using the epsilon-greedy strategy.
     /// Ignores context (non-contextual).
