@@ -4,3 +4,4 @@
 //! All algorithms implement the BanditPolicy trait and are generic over action, reward, and context types.
 
 pub mod epsilon_greedy;
+pub mod thompson_sampling;
