@@ -106,7 +106,7 @@ println!("Cumulative reward: {}", results.cumulative_reward);
 
 ## 🧩 **Future Roadmap**
 
-* [ ] Add `UCB1`, `ThompsonSampling`, and `LinUCB`
+* [ ] Add more algorithms: `UCB1`, `LinUCB` etc.
 * [ ] Benchmark suite comparing with Python implementations
 * [ ] Async/streaming reward update support
 * [ ] Optional logging/tracing integration
